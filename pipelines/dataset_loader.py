@@ -91,7 +91,8 @@ class NuScenesOccupancyDataset(Dataset):
             'gt_occ': torch.tensor(gt_occ, dtype=torch.long),
             'gt_flow': torch.tensor(gt_flow, dtype=torch.float32),
             'delta_transform': delta_transform,
-            'token': f"synthetic_frame_{idx}"
+            'token': f"synthetic_frame_{idx}",
+            'scene_token': "scene_synthetic_0"
         }
 
     def __getitem__(self, idx):
@@ -218,7 +219,8 @@ class NuScenesOccupancyDataset(Dataset):
             'gt_occ': torch.tensor(gt_occ, dtype=torch.long),
             'gt_flow': torch.tensor(gt_flow, dtype=torch.float32),
             'delta_transform': delta_transform,
-            'token': token
+            'token': token,
+            'scene_token': scene_token
         }
 
 def collate_fn_4docc(batch):
@@ -230,6 +232,7 @@ def collate_fn_4docc(batch):
     gt_flow = torch.stack([item['gt_flow'] for item in batch], dim=0)
     delta_transform = torch.stack([item['delta_transform'] for item in batch], dim=0)
     tokens = [item['token'] for item in batch]
+    scene_tokens = [item.get('scene_token', '') for item in batch]
 
     return {
         'imgs': imgs,
@@ -238,5 +241,6 @@ def collate_fn_4docc(batch):
         'gt_occ': gt_occ,
         'gt_flow': gt_flow,
         'delta_transform': delta_transform,
-        'tokens': tokens
+        'tokens': tokens,
+        'scene_tokens': scene_tokens
     }

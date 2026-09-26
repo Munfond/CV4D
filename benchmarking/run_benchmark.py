@@ -18,6 +18,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 
 from configs.base_config import Config

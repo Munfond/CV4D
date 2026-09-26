@@ -75,7 +75,7 @@ def main():
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
-        shuffle=True,
+        shuffle=False, # Chạy tuần tự theo video timeline để gióng hàng Temporal chuẩn xác
         num_workers=2 if not args.synthetic else 0,
         collate_fn=collate_fn_4docc,
         pin_memory=True if torch.cuda.is_available() else False
@@ -106,7 +106,13 @@ def main():
         optimizer.zero_grad()
 
         prev_bev = None
+        prev_scene = None
         for step, batch in enumerate(dataloader):
+            curr_scene = batch['scene_tokens'][0] if ('scene_tokens' in batch and len(batch['scene_tokens']) > 0) else None
+            if curr_scene != prev_scene:
+                prev_bev = None
+                prev_scene = curr_scene
+
             batch['imgs'] = batch['imgs'].to(device)
             batch['lidar_pts'] = [pts.to(device) for pts in batch['lidar_pts']]
             batch['radar_pts'] = [pts.to(device) for pts in batch['radar_pts']]

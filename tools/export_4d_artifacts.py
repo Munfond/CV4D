@@ -15,6 +15,7 @@ import sys
 import argparse
 import time
 import torch
+import numpy as np
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
