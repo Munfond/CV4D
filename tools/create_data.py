@@ -56,12 +56,39 @@ def parse_nuscenes_pure_json(json_dir):
     calib_map = {item['token']: item for item in calibrated_sensors}
     ego_map = {item['token']: item for item in ego_poses}
 
-    # Xây dựng bảng ánh xạ foreign key: sample_token -> {channel: sample_data}
+    # 1. Đọc sensor.json nếu có để map calibrated_sensor_token -> channel
+    calib_to_channel = {}
+    sensor_file = os.path.join(json_dir, 'sensor.json')
+    if os.path.exists(sensor_file):
+        with open(sensor_file, 'r') as f:
+            sensors = json.load(f)
+            s_map = {item['token']: item.get('channel', '') for item in sensors}
+            for cs in calibrated_sensors:
+                calib_to_channel[cs['token']] = s_map.get(cs.get('sensor_token', ''), '')
+
+    all_channels = [
+        'CAM_FRONT', 'CAM_FRONT_LEFT', 'CAM_FRONT_RIGHT', 
+        'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT',
+        'LIDAR_TOP',
+        'RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT'
+    ]
+
+    # 2. Xây dựng bảng ánh xạ foreign key: sample_token -> {channel: sample_data}
     sample_to_sd = {}
     for sd in sample_data:
         s_tok = sd.get('sample_token')
+        if not s_tok:
+            continue
         chan = sd.get('channel')
-        if s_tok and chan:
+        if not chan and sd.get('calibrated_sensor_token') in calib_to_channel:
+            chan = calib_to_channel[sd['calibrated_sensor_token']]
+        if not chan and 'filename' in sd:
+            fn = sd['filename']
+            for c in all_channels:
+                if f"/{c}/" in fn or fn.startswith(f"{c}/") or f"__{c}__" in fn:
+                    chan = c
+                    break
+        if chan:
             if s_tok not in sample_to_sd:
                 sample_to_sd[s_tok] = {}
             if sd.get('is_key_frame', True) or chan not in sample_to_sd[s_tok]:

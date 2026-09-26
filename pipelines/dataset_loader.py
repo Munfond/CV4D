@@ -103,37 +103,72 @@ class NuScenesOccupancyDataset(Dataset):
         # 1. Đọc và tiền xử lý 6 camera
         imgs = []
         for cam_name in Config.CAM_NAMES:
-            cam_path = os.path.join(self.data_root, info['cams'][cam_name]['data_path'])
-            if os.path.exists(cam_path):
-                img = cv2.imread(cam_path)
-                # Tự động làm mờ mặt và biển số
-                img = self.anonymizer.anonymize_image(img)
-                img = cv2.resize(img, (Config.IMG_W, Config.IMG_H))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-                img = np.transpose(img, (2, 0, 1)) # [3, H, W]
-            else:
+            rel_path = info.get('cams', {}).get(cam_name, {}).get('data_path', '')
+            img = None
+            if rel_path:
+                candidate_paths = [
+                    os.path.join(self.data_root, rel_path),
+                    os.path.join(self.data_root, 'v1.0-mini', rel_path),
+                    os.path.join(self.data_root, 'mini-nuscenes', rel_path),
+                    os.path.join(os.path.dirname(self.data_root), rel_path),
+                    rel_path
+                ]
+                cam_path = next((p for p in candidate_paths if os.path.isfile(p)), None)
+                if cam_path is not None:
+                    raw_img = cv2.imread(cam_path)
+                    if raw_img is not None and raw_img.size > 0:
+                        raw_img = self.anonymizer.anonymize_image(raw_img)
+                        raw_img = cv2.resize(raw_img, (Config.IMG_W, Config.IMG_H))
+                        raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                        img = np.transpose(raw_img, (2, 0, 1)) # [3, H, W]
+
+            if img is None:
                 img = np.zeros((3, Config.IMG_H, Config.IMG_W), dtype=np.float32)
             imgs.append(img)
         imgs = np.stack(imgs, axis=0) # [6, 3, H, W]
 
         # 2. Đọc LiDAR
-        lidar_path = os.path.join(self.data_root, info['lidar']['data_path'])
-        if os.path.exists(lidar_path):
-            lidar_pts = np.fromfile(lidar_path, dtype=np.float32).reshape(-1, 5)[:, :4]
-        else:
+        lidar_rel = info.get('lidar', {}).get('data_path', '')
+        lidar_pts = None
+        if lidar_rel:
+            candidate_lidar = [
+                os.path.join(self.data_root, lidar_rel),
+                os.path.join(self.data_root, 'v1.0-mini', lidar_rel),
+                os.path.join(self.data_root, 'mini-nuscenes', lidar_rel),
+                os.path.join(os.path.dirname(self.data_root), lidar_rel),
+                lidar_rel
+            ]
+            lidar_path = next((p for p in candidate_lidar if os.path.isfile(p)), None)
+            if lidar_path is not None:
+                try:
+                    pts = np.fromfile(lidar_path, dtype=np.float32).reshape(-1, 5)[:, :4]
+                    if len(pts) > 0:
+                        lidar_pts = pts
+                except Exception:
+                    pass
+        if lidar_pts is None:
             lidar_pts = np.zeros((100, 4), dtype=np.float32)
 
         # 3. Đọc Radar
-        radar_path = os.path.join(self.data_root, info['radar']['data_path'])
-        if os.path.exists(radar_path):
-            # Với định dạng pcd đơn giản hoặc bin
-            try:
-                from nuscenes.utils.data_classes import RadarPointCloud
-                rpc = RadarPointCloud.from_file(radar_path)
-                radar_pts = rpc.points[:5, :].T # [N, 5]
-            except:
-                radar_pts = np.zeros((50, 5), dtype=np.float32)
-        else:
+        radar_rel = info.get('radar', {}).get('data_path', '')
+        radar_pts = None
+        if radar_rel:
+            candidate_radar = [
+                os.path.join(self.data_root, radar_rel),
+                os.path.join(self.data_root, 'v1.0-mini', radar_rel),
+                os.path.join(self.data_root, 'mini-nuscenes', radar_rel),
+                os.path.join(os.path.dirname(self.data_root), radar_rel),
+                radar_rel
+            ]
+            radar_path = next((p for p in candidate_radar if os.path.isfile(p)), None)
+            if radar_path is not None:
+                try:
+                    from nuscenes.utils.data_classes import RadarPointCloud
+                    rpc = RadarPointCloud.from_file(radar_path)
+                    radar_pts = rpc.points[:5, :].T # [N, 5]
+                except Exception:
+                    pass
+        if radar_pts is None:
             radar_pts = np.zeros((50, 5), dtype=np.float32)
 
         # 4. Đọc Ground Truth Occ3D / Cam4D
