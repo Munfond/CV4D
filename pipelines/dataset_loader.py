@@ -9,6 +9,9 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 import cv2
+# Tối ưu hóa CPU: Không cho OpenCV tranh chấp luồng với PyTorch DataLoader
+cv2.setNumThreads(0)
+cv2.ocl.setUseOpenCL(False)
 
 from configs.base_config import Config
 from pipelines.coordinate_transforms import compute_ego_relative_transform
@@ -16,12 +19,14 @@ from pipelines.anonymizer import PrivacyAnonymizer
 
 class NuScenesOccupancyDataset(Dataset):
     def __init__(self, data_root="data/nuscenes", info_path="data/cache/nuscenes_infos_val.pkl", 
-                 occ_gt_root="data/occ3d_cam4d", is_synthetic=False, synthetic_len=20):
+                 occ_gt_root="data/occ3d_cam4d", is_synthetic=False, synthetic_len=20,
+                 enable_anonymize=False):
         self.data_root = data_root
         self.occ_gt_root = occ_gt_root
         self.is_synthetic = is_synthetic
         self.synthetic_len = synthetic_len
-        self.anonymizer = PrivacyAnonymizer()
+        self.enable_anonymize = enable_anonymize
+        self.anonymizer = PrivacyAnonymizer() if enable_anonymize else None
         
         if not is_synthetic and os.path.exists(info_path):
             with open(info_path, 'rb') as f:
@@ -118,8 +123,9 @@ class NuScenesOccupancyDataset(Dataset):
                 if cam_path is not None:
                     raw_img = cv2.imread(cam_path)
                     if raw_img is not None and raw_img.size > 0:
-                        raw_img = self.anonymizer.anonymize_image(raw_img)
                         raw_img = cv2.resize(raw_img, (Config.IMG_W, Config.IMG_H))
+                        if self.enable_anonymize and self.anonymizer is not None:
+                            raw_img = self.anonymizer.anonymize_image(raw_img)
                         raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
                         img = np.transpose(raw_img, (2, 0, 1)) # [3, H, W]
 
