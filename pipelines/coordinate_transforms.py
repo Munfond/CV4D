@@ -1,15 +1,29 @@
-"""
-Module biến đổi hệ tọa độ đa cảm biến về hệ quy chiếu thân xe (Ego-Vehicle)
-"""
 import numpy as np
 import torch
-from pyquaternion import Quaternion
+
+try:
+    from pyquaternion import Quaternion
+    HAVE_PYQUAT = True
+except ImportError:
+    HAVE_PYQUAT = False
 
 def quaternion_to_matrix(q):
-    """Chuyển quaternion [w, x, y, z] sang ma trận quay 3x3"""
-    if isinstance(q, list):
-        q = Quaternion(q)
-    return q.rotation_matrix
+    """
+    Chuyển quaternion [w, x, y, z] sang ma trận quay 3x3.
+    Có sẵn fallback thuần NumPy nếu máy chưa cài pyquaternion.
+    """
+    if HAVE_PYQUAT:
+        if isinstance(q, (list, np.ndarray)):
+            q = Quaternion(q)
+        return q.rotation_matrix
+    else:
+        # Fallback thuần toán học NumPy
+        w, x, y, z = q[0], q[1], q[2], q[3]
+        return np.array([
+            [1 - 2*(y**2 + z**2), 2*(x*y - w*z),     2*(x*z + w*y)],
+            [2*(x*y + w*z),     1 - 2*(x**2 + z**2), 2*(y*z - w*x)],
+            [2*(x*z - w*y),     2*(y*z + w*x),     1 - 2*(x**2 + y**2)]
+        ], dtype=np.float32)
 
 def transform_points(points, translation, rotation):
     """

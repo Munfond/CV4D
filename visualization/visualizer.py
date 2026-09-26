@@ -24,13 +24,13 @@ class OccupancyVisualizer:
                 print("[Visualizer] Chưa cài rerun-sdk, chuyển sang chế độ Matplotlib.")
                 self.use_rerun = False
 
-    def plot_bev_snapshot(self, occ_pred, occ_gt=None, flow_pred=None, lidar_pts=None, radar_pts=None, save_path="bev_output.png"):
+    def plot_bev_snapshot(self, occ_pred, occ_gt=None, flow_pred=None, lidar_pts=None, radar_pts=None, risk_mask=None, save_path="bev_output.png"):
         """
         Vẽ bản đồ BEV góc nhìn từ trên cao tương tự giao diện kiểm thử chuyên nghiệp:
         - Tâm xe: Tam giác màu xanh lơ
         - Điểm LiDAR: Màu vàng/xám
         - Điểm Radar: Màu hồng/tím kèm vector vận tốc
-        - Dự đoán Occupancy: Các khối màu Cam/Đỏ
+        - Dự đoán Occupancy: Cam (an toàn) / Vàng (chú ý) / Đỏ (nguy cơ va chạm cao)
         - Ground Truth: Viền màu Xanh lá
         """
         if torch.is_tensor(occ_pred):
@@ -39,6 +39,8 @@ class OccupancyVisualizer:
             occ_gt = occ_gt.detach().cpu().numpy()
         if torch.is_tensor(flow_pred):
             flow_pred = flow_pred.detach().cpu().numpy()
+        if torch.is_tensor(risk_mask):
+            risk_mask = risk_mask.detach().cpu().numpy()
 
         fig, ax = plt.subplots(figsize=(10, 10), facecolor='black')
         ax.set_facecolor('black')
@@ -75,8 +77,16 @@ class OccupancyVisualizer:
             y_m = y_idx * Config.VOXEL_SIZE[1] + Config.POINT_CLOUD_RANGE[1]
             labels = bev_occ_pred[y_idx, x_idx]
             
-            # Vẽ các voxel dự đoán (Màu Cam/Xanh)
-            ax.scatter(x_m, y_m, s=6, c='#ff7700', alpha=0.8, label='Predicted Occupancy')
+            # Vẽ các voxel dự đoán (Màu theo rủi ro nếu có)
+            if risk_mask is not None:
+                bev_risk = np.max(risk_mask, axis=0)
+                risk_vals = bev_risk[y_idx, x_idx]
+                colors = np.array(['#ff7700'] * len(x_idx), dtype=object)
+                colors[risk_vals == 1] = '#ffcc00' # Vàng: Chú ý
+                colors[risk_vals == 2] = '#ff0033' # Đỏ: Nguy cơ va chạm cao
+                ax.scatter(x_m, y_m, s=7, c=colors, alpha=0.85, label='Predicted Occupancy (Red=Risk)')
+            else:
+                ax.scatter(x_m, y_m, s=6, c='#ff7700', alpha=0.8, label='Predicted Occupancy')
 
             # 5. Vẽ vector dòng chảy (Occupancy Flow)
             if flow_pred is not None:

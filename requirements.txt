@@ -1,0 +1,16 @@
+# Yêu cầu thư viện cho VinFast ADAS 4D Occupancy Lab (RAV-25)
+# Tương thích PyTorch 2.x, CUDA 11.8/12.1 và Kaggle T4
+
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0,<2.0.0
+opencv-python-headless<=4.10.0.84
+pyquaternion>=0.9.9
+nuscenes-devkit>=1.1.10
+einops>=0.7.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+rerun-sdk>=0.15.0
+ultralytics>=8.0.0
+wandb>=0.16.0

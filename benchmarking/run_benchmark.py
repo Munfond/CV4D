@@ -5,8 +5,15 @@ Benchmark Suite: So sánh đối đầu đa cấu hình cảm biến cho VinFast
 - Camera + LiDAR
 - Tri-modal (Camera + LiDAR + Radar)
 """
+import os
+import sys
 import argparse
 import time
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import torch
 from torch.utils.data import DataLoader
 

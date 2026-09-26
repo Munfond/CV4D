@@ -3,9 +3,15 @@ Script Demo Suy luận 1-Click (Demo Inference & BEV Map Export)
 Chạy suy luận qua mô hình 4D-OccFusion và xuất trực tiếp bản đồ BEV Map ra file ảnh!
 """
 import os
+import sys
 import argparse
-import torch
 import time
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+import torch
 
 from configs.base_config import Config
 from models.full_4docc_model import VinFast4DOccModel
@@ -71,7 +77,15 @@ def main():
         print(f"VRAM GPU tiêu thụ  : {vram:.2f} GB")
     print("="*60)
 
-    # 5. Xuất hình ảnh bản đồ BEV
+    # 5. Phân tích vùng nguy cơ va chạm hình học (Collision Risk Assessment)
+    from visualization.risk_assessment import CollisionRiskAssessment
+    risk_analyzer = CollisionRiskAssessment(horizon_sec=1.5)
+    risk_mask = risk_analyzer.evaluate_risk(occ_pred, flow_pred, ego_speed_mps=8.0)
+    high_risk_count = int((risk_mask == 2).sum())
+    caution_count = int((risk_mask == 1).sum())
+    print(f"Cảnh báo va chạm : {high_risk_count} voxels nguy cơ cao (Đỏ) | {caution_count} voxels chú ý (Vàng)")
+
+    # 6. Xuất hình ảnh bản đồ BEV
     visualizer = OccupancyVisualizer(use_rerun=False)
     visualizer.plot_bev_snapshot(
         occ_pred=occ_pred,
@@ -79,6 +93,7 @@ def main():
         flow_pred=flow_pred,
         lidar_pts=batch['lidar_pts'][0],
         radar_pts=batch['radar_pts'][0],
+        risk_mask=risk_mask,
         save_path=args.output_img
     )
     print(f"\n[Demo] ĐÃ XUẤT THÀNH CÔNG BẢN ĐỒ BEV RA FILE: {args.output_img}")

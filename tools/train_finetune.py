@@ -6,12 +6,31 @@ Script Huấn luyện / Fine-tune Mô hình 4D-OccFusion trên Kaggle
 - Tích lũy Gradient (Gradient Accumulation)
 """
 import os
+import sys
 import argparse
 import time
+
+# Tự động thêm thư mục gốc dự án vào PYTHONPATH để tránh lỗi ModuleNotFoundError
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
+
+try:
+    from torch.amp import autocast, GradScaler
+    def make_scaler(dev, enabled):
+        return GradScaler(dev, enabled=enabled)
+    def make_autocast(dev, enabled):
+        return autocast(dev, enabled=enabled)
+except ImportError:
+    from torch.cuda.amp import autocast, GradScaler
+    def make_scaler(dev, enabled):
+        return GradScaler(enabled=enabled)
+    def make_autocast(dev, enabled):
+        return autocast(enabled=enabled)
 
 from configs.base_config import Config
 from models.full_4docc_model import VinFast4DOccModel
@@ -65,7 +84,8 @@ def main():
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=Config.WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
-    scaler = GradScaler(enabled=args.amp)
+    device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+    scaler = make_scaler(device_type, enabled=args.amp)
 
     # 4. Hàm mất mát (Loss)
     criterion_occ = nn.CrossEntropyLoss(ignore_index=255)
@@ -89,7 +109,7 @@ def main():
             gt_occ = batch['gt_occ'].to(device)
             gt_flow = batch['gt_flow'].to(device)
 
-            with autocast(enabled=args.amp):
+            with make_autocast(device_type, enabled=args.amp):
                 outputs = model(batch, prev_bev=prev_bev, delta_transform=delta_transform)
                 prev_bev = outputs['bev_feat'].detach()
 

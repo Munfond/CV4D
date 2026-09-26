@@ -77,7 +77,7 @@ class LiDARPillarNet(nn.Module):
 
             # Scatter Max-pooling vào lưới BEV
             linear_indices = y_indices * self.bev_w + x_indices
-            bev_flat = torch.zeros((self.bev_h * self.bev_w, 128), device=device)
+            bev_flat = torch.zeros((self.bev_h * self.bev_w, 128), device=device, dtype=feat_pts.dtype)
             bev_flat.scatter_reduce_(0, linear_indices.unsqueeze(-1).expand(-1, 128), feat_pts, reduce="amax", include_self=False)
             
             bev_dense = bev_flat.view(self.bev_h, self.bev_w, 128).permute(2, 0, 1).unsqueeze(0)

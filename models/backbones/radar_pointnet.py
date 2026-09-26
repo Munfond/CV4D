@@ -58,7 +58,7 @@ class RadarPointNet(nn.Module):
             y_idx = ((pts[:, 1] - self.y_min) / (self.y_max - self.y_min) * self.bev_h).long().clamp(0, self.bev_h - 1)
 
             linear_indices = y_idx * self.bev_w + x_idx
-            bev_flat = torch.zeros((self.bev_h * self.bev_w, 64), device=device)
+            bev_flat = torch.zeros((self.bev_h * self.bev_w, 64), device=device, dtype=feat.dtype)
             bev_flat.scatter_reduce_(0, linear_indices.unsqueeze(-1).expand(-1, 64), feat, reduce="amax", include_self=False)
 
             bev_dense = bev_flat.view(self.bev_h, self.bev_w, 64).permute(2, 0, 1).unsqueeze(0)

@@ -49,10 +49,10 @@ class ConvFuser(nn.Module):
         B, _, H, W = cam_bev.shape
 
         if lidar_bev is None or mode in ['cam_only', 'cam_radar']:
-            lidar_bev = torch.zeros((B, 256, H, W), device=device)
+            lidar_bev = torch.zeros((B, 256, H, W), device=device, dtype=cam_bev.dtype)
 
         if radar_bev is None or mode in ['cam_only', 'cam_lidar']:
-            radar_bev = torch.zeros((B, 64, H, W), device=device)
+            radar_bev = torch.zeros((B, 64, H, W), device=device, dtype=cam_bev.dtype)
 
         # Nối đặc trưng dọc theo trục Channel
         concat_feat = torch.cat([cam_bev, lidar_bev, radar_bev], dim=1)

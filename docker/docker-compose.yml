@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  vinfast-lab:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: vinfast_bev_occupancy_lab
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+    volumes:
+      - ..:/workspace
+    shm_size: '16gb'
+    network_mode: "host"
+    stdin_open: true
+    tty: true
