@@ -66,9 +66,14 @@ class OccupancyVisualizer:
                 ax.scatter(radar_pts[:, 1], radar_pts[:, 0], s=12, c='#ff00ff', marker='D', label='Radar Detections')
 
         # 4. Chiếu Voxel Occupancy lên mặt phẳng BEV (Gộp trục Z)
-        # occ_pred shape: [16, 200, 200] -> gộp thành 2D [200, 200]
-        bev_occ_pred = np.max(occ_pred, axis=0) # lấy nhãn lớn nhất theo chiều cao
-        occupied_mask = (bev_occ_pred > 0) & (bev_occ_pred != 11) # bỏ qua mặt đường để nhìn rõ vật cản
+        # occ_pred shape: [16, 200, 200] -> Chiếu xuống 2D, ưu tiên vật thể khác Free (17) và mặt đường (11)
+        bev_occ_pred = np.full((Config.GRID_SIZE_Y, Config.GRID_SIZE_X), Config.FREE_LABEL, dtype=occ_pred.dtype)
+        for z in range(occ_pred.shape[0]):
+            slice_z = occ_pred[z]
+            obj_mask = (slice_z != Config.FREE_LABEL) & (slice_z != 11)
+            bev_occ_pred[obj_mask] = slice_z[obj_mask]
+
+        occupied_mask = (bev_occ_pred != Config.FREE_LABEL)
 
         y_idx, x_idx = np.where(occupied_mask)
         if len(x_idx) > 0:
@@ -102,8 +107,12 @@ class OccupancyVisualizer:
 
         # 6. Vẽ Ground Truth (Viền xanh lá - Green = GT)
         if occ_gt is not None:
-            bev_occ_gt = np.max(occ_gt, axis=0)
-            gt_mask = (bev_occ_gt > 0) & (bev_occ_gt != 11)
+            bev_occ_gt = np.full((Config.GRID_SIZE_Y, Config.GRID_SIZE_X), Config.FREE_LABEL, dtype=occ_gt.dtype)
+            for z in range(occ_gt.shape[0]):
+                slice_z = occ_gt[z]
+                obj_mask = (slice_z != Config.FREE_LABEL) & (slice_z != 11)
+                bev_occ_gt[obj_mask] = slice_z[obj_mask]
+            gt_mask = (bev_occ_gt != Config.FREE_LABEL)
             y_gt, x_gt = np.where(gt_mask)
             if len(x_gt) > 0:
                 x_gt_m = x_gt * Config.VOXEL_SIZE[0] + Config.POINT_CLOUD_RANGE[0]

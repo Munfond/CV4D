@@ -31,18 +31,19 @@ class Config:
     RADAR_FEAT_DIM = 64
     BEV_FEAT_DIM = 256
 
-    # 4. Nhãn ngữ nghĩa 3D Occupancy (17 nhãn Occ3D + 1 nhãn Free Space)
+    # 4. Nhãn ngữ nghĩa 3D Occupancy chuẩn Occ3D-nuScenes (17 classes nuScenes-lidarseg + Class 17 Free Space)
     NUM_CLASSES = 18
+    FREE_LABEL = 17
     CLASS_NAMES = [
-        'free', 'barrier', 'bicycle', 'bus', 'car', 'construction_vehicle',
+        'others', 'barrier', 'bicycle', 'bus', 'car', 'construction_vehicle',
         'motorcycle', 'pedestrian', 'traffic_cone', 'trailer', 'truck',
         'driveable_surface', 'other_flat', 'sidewalk', 'terrain', 'manmade',
-        'vegetation', 'others'
+        'vegetation', 'free'
     ]
 
     # Bảng màu hiển thị (RGB)
     COLOR_MAP = {
-        0: [0, 0, 0],          # free
+        0: [105, 105, 105],    # others / void
         1: [255, 120, 50],     # barrier
         2: [255, 192, 203],    # bicycle
         3: [255, 255, 0],      # bus
@@ -59,7 +60,7 @@ class Config:
         14: [34, 139, 34],     # terrain
         15: [139, 69, 19],     # manmade
         16: [0, 100, 0],       # vegetation
-        17: [105, 105, 105]    # others
+        17: [0, 0, 0]          # free space (không khí)
     }
 
     # 5. Tham số Huấn luyện Kaggle

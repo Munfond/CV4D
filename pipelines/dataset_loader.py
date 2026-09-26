@@ -32,6 +32,26 @@ class NuScenesOccupancyDataset(Dataset):
             self.infos = [{} for _ in range(synthetic_len)]
             print(f"[Dataset] Đang chạy chế độ Synthetic Mock Data ({synthetic_len} frames)")
 
+        # Lập chỉ mục tự động cho toàn bộ nhãn Occ3D Ground Truth
+        self.occ_path_map = {}
+        search_dirs = [
+            self.occ_gt_root,
+            os.path.join(self.occ_gt_root, 'gts'),
+            os.path.join(self.data_root, 'gts'),
+            self.data_root,
+            '/kaggle/input'
+        ]
+        for sdir in search_dirs:
+            if os.path.exists(sdir):
+                for root, _, files in os.walk(sdir):
+                    if 'labels.npz' in files:
+                        frame_tok = os.path.basename(root)
+                        self.occ_path_map[frame_tok] = os.path.join(root, 'labels.npz')
+        if len(self.occ_path_map) > 0:
+            print(f"[Dataset] Đã lập chỉ mục {len(self.occ_path_map)} file nhãn Occ3D Ground Truth chuẩn.")
+        elif not self.is_synthetic:
+            print("[Dataset] Chú ý: Chưa thấy file labels.npz nào trong các thư mục tìm kiếm.")
+
     def __len__(self):
         return len(self.infos)
 
@@ -51,10 +71,10 @@ class NuScenesOccupancyDataset(Dataset):
         radar_pts[:, 4] = np.random.uniform(-10.0, 10.0, 500) # vận tốc m/s
 
         # Ground Truth 3D Voxel: [16, 200, 200]
-        gt_occ = np.zeros((Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), dtype=np.int64)
+        gt_occ = np.full((Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), Config.FREE_LABEL, dtype=np.int64)
         # Giả lập vài xe cộ và mặt đường
-        gt_occ[0:2, :, :] = 11 # mặt đường
-        gt_occ[1:4, 90:110, 120:140] = 4 # xe hơi phía trước
+        gt_occ[0:2, :, :] = 11 # mặt đường (driveable_surface)
+        gt_occ[1:4, 90:110, 120:140] = 4 # xe hơi phía trước (car)
 
         # Ground Truth Flow: [3, 16, 200, 200]
         gt_flow = np.zeros((3, Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), dtype=np.float32)
@@ -119,15 +139,35 @@ class NuScenesOccupancyDataset(Dataset):
         # 4. Đọc Ground Truth Occ3D / Cam4D
         token = info['token']
         scene_token = info.get('scene_token', 'scene_0')
-        gt_path = os.path.join(self.occ_gt_root, 'mini_gt', scene_token, token, 'labels.npz')
-        if os.path.exists(gt_path):
+        scene_name = info.get('scene_name', '')
+
+        # Tìm từ chỉ mục đã quét trước
+        gt_path = self.occ_path_map.get(token, None)
+        if gt_path is None:
+            gt_candidates = [
+                os.path.join(self.occ_gt_root, 'gts', scene_name, token, 'labels.npz'),
+                os.path.join(self.occ_gt_root, 'gts', scene_token, token, 'labels.npz'),
+                os.path.join(self.occ_gt_root, scene_name, token, 'labels.npz'),
+                os.path.join(self.occ_gt_root, scene_token, token, 'labels.npz'),
+                os.path.join(self.data_root, 'gts', scene_name, token, 'labels.npz'),
+                os.path.join(self.data_root, 'gts', scene_token, token, 'labels.npz'),
+                os.path.join(self.occ_gt_root, 'mini_gt', scene_name, token, 'labels.npz'),
+                os.path.join(self.occ_gt_root, 'mini_gt', scene_token, token, 'labels.npz')
+            ]
+            gt_path = next((p for p in gt_candidates if os.path.exists(p)), None)
+
+        if gt_path is not None:
             data = np.load(gt_path)
-            gt_occ = data['semantics'] # [16, 200, 200] hoặc [200, 200, 16]
+            gt_occ = data['semantics'] # [200, 200, 16] trong Occ3D chuẩn
             if gt_occ.shape[0] == 200:
-                gt_occ = np.transpose(gt_occ, (2, 1, 0)) # về [Z, Y, X]
-            gt_flow = data.get('flow', np.zeros((3, Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), dtype=np.float32))
+                gt_occ = np.transpose(gt_occ, (2, 1, 0)) # Chuyển [X, Y, Z] về [Z, Y, X] -> [16, 200, 200]
+            if 'flow' in data.files:
+                gt_flow = data['flow']
+            else:
+                gt_flow = np.zeros((3, Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), dtype=np.float32)
         else:
-            gt_occ = np.zeros((Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), dtype=np.int64)
+            # Fallback nếu không có file nhãn: toàn bộ không gian là free space (17)
+            gt_occ = np.full((Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), Config.FREE_LABEL, dtype=np.int64)
             gt_flow = np.zeros((3, Config.GRID_SIZE_Z, Config.GRID_SIZE_Y, Config.GRID_SIZE_X), dtype=np.float32)
 
         # 5. Tính delta transform nếu có frame trước

@@ -13,6 +13,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 def find_json_dir(data_root, version='v1.0-mini'):
     """Tìm thư mục chứa các file json của nuScenes"""
     candidate_paths = [
@@ -39,6 +42,14 @@ def parse_nuscenes_pure_json(json_dir):
         calibrated_sensors = json.load(f)
     with open(os.path.join(json_dir, 'ego_pose.json'), 'r') as f:
         ego_poses = json.load(f)
+
+    # Đọc thêm scene.json để ánh xạ sang tên scene (ví dụ: scene-0061) cho bộ nhãn Occ3D
+    scene_name_map = {}
+    scene_file = os.path.join(json_dir, 'scene.json')
+    if os.path.exists(scene_file):
+        with open(scene_file, 'r') as f:
+            scenes = json.load(f)
+            scene_name_map = {item['token']: item['name'] for item in scenes}
 
     # Đánh chỉ mục dictionary bằng token để tra cứu O(1)
     sd_map = {item['token']: item for item in sample_data}
@@ -94,6 +105,7 @@ def parse_nuscenes_pure_json(json_dir):
             'token': sample['token'],
             'timestamp': sample['timestamp'],
             'scene_token': sample['scene_token'],
+            'scene_name': scene_name_map.get(sample['scene_token'], ''),
             'ego2global_translation': ego_pose['translation'],
             'ego2global_rotation': ego_pose['rotation'],
             'cams': cams,

@@ -59,17 +59,20 @@ class OccupancyMetrics:
                 self.velocity_errors.extend(vel_err.tolist())
 
     def compute(self):
-        """Tính toán tổng hợp các chỉ số"""
-        # 1. Geometric Voxel IoU (bỏ qua class 0 là free)
-        tp_geo = np.sum(self.confusion_matrix[1:, 1:])
-        fn_geo = np.sum(self.confusion_matrix[1:, 0])
-        fp_geo = np.sum(self.confusion_matrix[0, 1:])
+        """Tính toán tổng hợp các chỉ số theo chuẩn CVPR Occ3D Benchmark"""
+        free_idx = getattr(Config, 'FREE_LABEL', 17)
+
+        # 1. Geometric Voxel IoU (Phân loại Nhị phân: Vật thể vs Không gian trống Free=17)
+        occ_indices = [c for c in range(self.num_classes) if c != free_idx]
+        tp_geo = np.sum(self.confusion_matrix[np.ix_(occ_indices, occ_indices)])
+        fn_geo = np.sum(self.confusion_matrix[occ_indices, free_idx])
+        fp_geo = np.sum(self.confusion_matrix[free_idx, occ_indices])
         voxel_iou = (tp_geo / (tp_geo + fp_geo + fn_geo + 1e-6)) * 100.0
 
-        # 2. Semantic mIoU (từng class)
+        # 2. Semantic mIoU (Đánh giá trên 17 classes ngữ nghĩa, không tính Free=17)
         ious = []
         class_ious = {}
-        for c in range(1, self.num_classes): # bỏ qua class 0: free
+        for c in occ_indices:
             tp = self.confusion_matrix[c, c]
             fp = np.sum(self.confusion_matrix[:, c]) - tp
             fn = np.sum(self.confusion_matrix[c, :]) - tp
@@ -78,7 +81,7 @@ class OccupancyMetrics:
             ious.append(iou_c)
             class_ious[Config.CLASS_NAMES[c]] = iou_c
 
-        miou = np.mean(ious)
+        miou = float(np.nanmean(ious))
 
         # 3. mAVE (mean Absolute Velocity Error)
         if len(self.velocity_errors) > 0:

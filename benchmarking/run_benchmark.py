@@ -14,6 +14,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -83,6 +86,9 @@ def evaluate_configuration(model, dataloader, mode='tri_modal', device='cuda', m
 def main():
     parser = argparse.ArgumentParser(description="VinFast ADAS Multi-Sensor Benchmark Suite")
     parser.add_argument('--checkpoint', type=str, default=None, help="Đường dẫn file .pth trọng số")
+    parser.add_argument('--data-root', type=str, default='data/nuscenes', help="Thư mục dữ liệu nuScenes")
+    parser.add_argument('--cache-path', type=str, default='data/cache/nuscenes_infos_val.pkl', help="File cache metadata")
+    parser.add_argument('--occ-gt-root', type=str, default='data/occ3d_cam4d', help="Thư mục nhãn Occ3D")
     parser.add_argument('--synthetic', action='store_true', help="Dùng dữ liệu giả lập để test nhanh")
     parser.add_argument('--max-samples', type=int, default=15, help="Số frame test")
     args = parser.parse_args()
@@ -97,7 +103,12 @@ def main():
         model.load_state_dict(torch.load(args.checkpoint, map_location=device), strict=False)
 
     # 2. Khởi tạo Dataset
-    dataset = NuScenesOccupancyDataset(is_synthetic=args.synthetic)
+    dataset = NuScenesOccupancyDataset(
+        data_root=args.data_root,
+        info_path=args.cache_path,
+        occ_gt_root=args.occ_gt_root,
+        is_synthetic=args.synthetic
+    )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=collate_fn_4docc)
 
     configs_to_test = ['cam_only', 'cam_radar', 'cam_lidar', 'tri_modal']

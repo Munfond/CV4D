@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+
+# Data and caches
+data/cache/
+data/nuscenes/
+data/occ3d_cam4d/
+*.pkl
+*.tar.gz
+*.npz
+
+# Model weights
+checkpoints/
+*.pth
+*.pt
+
+# Outputs
+*.png
+*.jpg
+*.log
+scratch/

@@ -15,6 +15,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -48,6 +51,7 @@ def main():
     parser = argparse.ArgumentParser(description="VinFast 4DOcc Fine-tuning Script")
     parser.add_argument('--data-root', type=str, default='data/nuscenes')
     parser.add_argument('--cache-path', type=str, default='data/cache/nuscenes_infos_val.pkl')
+    parser.add_argument('--occ-gt-root', type=str, default='data/occ3d_cam4d', help="Thư mục nhãn Occ3D")
     parser.add_argument('--epochs', type=int, default=8, help="Số epoch huấn luyện")
     parser.add_argument('--batch-size', type=int, default=Config.BATCH_SIZE)
     parser.add_argument('--grad-accum', type=int, default=Config.GRAD_ACCUM_STEPS)
@@ -65,6 +69,7 @@ def main():
     dataset = NuScenesOccupancyDataset(
         data_root=args.data_root,
         info_path=args.cache_path,
+        occ_gt_root=args.occ_gt_root,
         is_synthetic=args.synthetic
     )
     dataloader = DataLoader(

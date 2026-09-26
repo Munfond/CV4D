@@ -11,6 +11,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import torch
 
 from configs.base_config import Config
@@ -22,7 +25,10 @@ from benchmarking.metrics import OccupancyMetrics
 def main():
     parser = argparse.ArgumentParser(description="VinFast 4DOcc 1-Click Demo")
     parser.add_argument('--checkpoint', type=str, default=None, help="File .pth trọng số (nếu có)")
-    parser.add_argument('--synthetic', action='store_true', default=True, help="Dùng dữ liệu giả lập để test nhanh")
+    parser.add_argument('--data-root', type=str, default='data/nuscenes', help="Thư mục nuScenes")
+    parser.add_argument('--cache-path', type=str, default='data/cache/nuscenes_infos_val.pkl', help="Cache metadata .pkl")
+    parser.add_argument('--occ-gt-root', type=str, default='data/occ3d_cam4d', help="Thư mục nhãn Occ3D")
+    parser.add_argument('--synthetic', action='store_true', default=False, help="Dùng dữ liệu giả lập để test nhanh")
     parser.add_argument('--mode', type=str, default='tri_modal', choices=['cam_only', 'cam_radar', 'cam_lidar', 'tri_modal'])
     parser.add_argument('--output-img', type=str, default='bev_output.png', help="File ảnh output BEV")
     args = parser.parse_args()
@@ -38,7 +44,12 @@ def main():
     model.eval()
 
     # 2. Lấy 1 mẫu dữ liệu
-    dataset = NuScenesOccupancyDataset(is_synthetic=args.synthetic)
+    dataset = NuScenesOccupancyDataset(
+        data_root=args.data_root,
+        info_path=args.cache_path,
+        occ_gt_root=args.occ_gt_root,
+        is_synthetic=args.synthetic
+    )
     sample = dataset[0]
     batch = collate_fn_4docc([sample])
 
