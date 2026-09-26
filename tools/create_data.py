@@ -56,47 +56,71 @@ def parse_nuscenes_pure_json(json_dir):
     calib_map = {item['token']: item for item in calibrated_sensors}
     ego_map = {item['token']: item for item in ego_poses}
 
+    # Xây dựng bảng ánh xạ foreign key: sample_token -> {channel: sample_data}
+    sample_to_sd = {}
+    for sd in sample_data:
+        s_tok = sd.get('sample_token')
+        chan = sd.get('channel')
+        if s_tok and chan:
+            if s_tok not in sample_to_sd:
+                sample_to_sd[s_tok] = {}
+            if sd.get('is_key_frame', True) or chan not in sample_to_sd[s_tok]:
+                sample_to_sd[s_tok][chan] = sd
+
     infos = []
     cam_types = ['CAM_FRONT', 'CAM_FRONT_LEFT', 'CAM_FRONT_RIGHT', 
                  'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']
 
     for sample in samples:
+        s_tok = sample['token']
+        # Hỗ trợ cả raw nuScenes JSON (sample không có trường 'data') lẫn devkit JSON
+        if 'data' in sample and isinstance(sample['data'], dict):
+            sensor_map = {chan: sd_map[tok] for chan, tok in sample['data'].items() if tok in sd_map}
+        else:
+            sensor_map = sample_to_sd.get(s_tok, {})
+
         cams = {}
         for cam in cam_types:
-            if cam in sample['data']:
-                sd = sd_map[sample['data'][cam]]
-                calib = calib_map[sd['calibrated_sensor_token']]
+            if cam in sensor_map:
+                sd = sensor_map[cam]
+                calib = calib_map.get(sd.get('calibrated_sensor_token', ''), {})
                 cams[cam] = {
-                    'data_path': sd['filename'],
-                    'sensor2ego_translation': calib['translation'],
-                    'sensor2ego_rotation': calib['rotation'],
+                    'data_path': sd.get('filename', ''),
+                    'sensor2ego_translation': calib.get('translation', [0, 0, 0]),
+                    'sensor2ego_rotation': calib.get('rotation', [1, 0, 0, 0]),
                     'cam_intrinsic': calib.get('camera_intrinsic', None)
+                }
+            else:
+                cams[cam] = {
+                    'data_path': '',
+                    'sensor2ego_translation': [0, 0, 0],
+                    'sensor2ego_rotation': [1, 0, 0, 0],
+                    'cam_intrinsic': None
                 }
 
         # LiDAR
-        lidar_token = sample['data'].get('LIDAR_TOP', None)
-        if lidar_token and lidar_token in sd_map:
-            lidar_sd = sd_map[lidar_token]
-            lidar_calib = calib_map[lidar_sd['calibrated_sensor_token']]
+        if 'LIDAR_TOP' in sensor_map:
+            lidar_sd = sensor_map['LIDAR_TOP']
+            lidar_calib = calib_map.get(lidar_sd.get('calibrated_sensor_token', ''), {})
             lidar_info = {
-                'data_path': lidar_sd['filename'],
-                'sensor2ego_translation': lidar_calib['translation'],
-                'sensor2ego_rotation': lidar_calib['rotation'],
+                'data_path': lidar_sd.get('filename', ''),
+                'sensor2ego_translation': lidar_calib.get('translation', [0, 0, 0]),
+                'sensor2ego_rotation': lidar_calib.get('rotation', [1, 0, 0, 0]),
             }
-            ego_pose = ego_map[lidar_sd['ego_pose_token']]
+            ego_pose = ego_map.get(lidar_sd.get('ego_pose_token', ''), {'translation': [0, 0, 0], 'rotation': [1, 0, 0, 0]})
         else:
             lidar_info = {'data_path': '', 'sensor2ego_translation': [0, 0, 0], 'sensor2ego_rotation': [1, 0, 0, 0]}
             ego_pose = {'translation': [0, 0, 0], 'rotation': [1, 0, 0, 0]}
 
         # Radar (Lấy Radar Front nếu có)
-        radar_token = sample['data'].get('RADAR_FRONT', None)
-        if radar_token and radar_token in sd_map:
-            radar_sd = sd_map[radar_token]
-            radar_calib = calib_map[radar_sd['calibrated_sensor_token']]
+        radar_chans = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT']
+        radar_sd = next((sensor_map[r] for r in radar_chans if r in sensor_map), None)
+        if radar_sd is not None:
+            radar_calib = calib_map.get(radar_sd.get('calibrated_sensor_token', ''), {})
             radar_info = {
-                'data_path': radar_sd['filename'],
-                'sensor2ego_translation': radar_calib['translation'],
-                'sensor2ego_rotation': radar_calib['rotation'],
+                'data_path': radar_sd.get('filename', ''),
+                'sensor2ego_translation': radar_calib.get('translation', [0, 0, 0]),
+                'sensor2ego_rotation': radar_calib.get('rotation', [1, 0, 0, 0]),
             }
         else:
             radar_info = {'data_path': '', 'sensor2ego_translation': [0, 0, 0], 'sensor2ego_rotation': [1, 0, 0, 0]}
@@ -104,10 +128,10 @@ def parse_nuscenes_pure_json(json_dir):
         info = {
             'token': sample['token'],
             'timestamp': sample['timestamp'],
-            'scene_token': sample['scene_token'],
-            'scene_name': scene_name_map.get(sample['scene_token'], ''),
-            'ego2global_translation': ego_pose['translation'],
-            'ego2global_rotation': ego_pose['rotation'],
+            'scene_token': sample.get('scene_token', ''),
+            'scene_name': scene_name_map.get(sample.get('scene_token', ''), ''),
+            'ego2global_translation': ego_pose.get('translation', [0, 0, 0]),
+            'ego2global_rotation': ego_pose.get('rotation', [1, 0, 0, 0]),
             'cams': cams,
             'lidar': lidar_info,
             'radar': radar_info
@@ -134,7 +158,9 @@ def main():
             print(f"\n[CreateData] THÀNH CÔNG RỰC RỠ! Đã nạp {len(infos)} frames dữ liệu nuScenes thật vào {args.out_path}")
             return
         except Exception as e:
+            import traceback
             print(f"[CreateData] Lỗi đọc JSON ({e}), chuyển sang phương án fallback.")
+            traceback.print_exc()
 
     print(f"[CreateData] Không tìm thấy thư mục JSON tại {args.data_root}. Tạo dữ liệu mẫu 20 frames...")
     dummy_infos = [{'token': f'sample_{i}', 'scene_token': 'scene_0'} for i in range(20)]
