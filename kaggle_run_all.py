@@ -85,8 +85,13 @@ def main():
     run_command(f"python tools/demo_inference.py {ckpt_arg} --data-root {data_root} --occ-gt-root {occ_gt_root} {synthetic_flag} --output-img bev_output.png",
                 "Suy luận & Xuất Ảnh Bản đồ BEV Map")
 
+    # 7. Đóng gói Trọn bộ Artifact 4D Chuẩn theo Đặc tả (T=5 frames)
+    run_command(f"python tools/export_4d_artifacts.py {ckpt_arg} --data-root {data_root} --occ-gt-root {occ_gt_root} {synthetic_flag} --temporal-window 5 --output-dir model_output",
+                "Đóng gói Toàn bộ Gói Artifact 4D (NPY, JSON, PLY, GIF, YAML)")
+
     print("\n" + "="*70)
     print("  TOÀN BỘ PIPELINE ĐÃ HOÀN TẤT THÀNH CÔNG TRÊN KAGGLE!")
+    print("  Gói Artifact chuẩn công nghiệp đã được xuất tại: model_output/")
     print("  File ảnh bản đồ BEV đã được xuất tại: bev_output.png")
     print("  File checkpoint trọng số đã được lưu tại: checkpoints/best_4docc.pth")
     print("="*70)

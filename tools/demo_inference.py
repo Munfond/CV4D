@@ -31,6 +31,7 @@ def main():
     parser.add_argument('--synthetic', action='store_true', default=False, help="Dùng dữ liệu giả lập để test nhanh")
     parser.add_argument('--mode', type=str, default='tri_modal', choices=['cam_only', 'cam_radar', 'cam_lidar', 'tri_modal'])
     parser.add_argument('--output-img', type=str, default='bev_output.png', help="File ảnh output BEV")
+    parser.add_argument('--export-dir', type=str, default='model_output', help="Thư mục đóng gói toàn bộ Artifact chuẩn")
     args = parser.parse_args()
 
     device = Config.DEVICE
@@ -108,6 +109,30 @@ def main():
         save_path=args.output_img
     )
     print(f"\n[Demo] ĐÃ XUẤT THÀNH CÔNG BẢN ĐỒ BEV RA FILE: {args.output_img}")
+
+    # 7. Đóng gói toàn bộ Artifact theo chuẩn công nghiệp (model_output/)
+    from pipelines.artifact_exporter import ArtifactExporter
+    exporter = ArtifactExporter(output_dir=args.export_dir, config=Config)
+    res['latency_ms'] = latency_ms
+    res['fps'] = 1000.0 / (latency_ms + 1e-4)
+    res['confusion_matrix'] = metrics.confusion_matrix
+
+    exporter.export_all(
+        temporal_predictions={
+            'logits': [occ_logits.cpu()],
+            'flow': [flow_pred.cpu()],
+            'gt_occ': [batch['gt_occ'][0].cpu()],
+            'gt_flow': [batch['gt_flow'][0].cpu()]
+        },
+        temporal_metadata={
+            'scene_id': sample.get('scene_token', 'scene-0061'),
+            'frame_ids': [sample.get('token', 'sample_0')],
+            'timestamps': [sample.get('timestamp', int(time.time() * 1e6))],
+            'delta_t': Config.DELTA_T
+        },
+        evaluation_data=res
+    )
+    print(f"[Demo] ĐÃ XUẤT HOÀN HẢO GÓI ARTIFACT VÀO THƯ MỤC: {args.export_dir}/")
 
 if __name__ == '__main__':
     main()
