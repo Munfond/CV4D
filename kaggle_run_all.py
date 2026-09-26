@@ -54,15 +54,30 @@ def main():
         use_synthetic = True
 
     # Kiểm tra bộ nhãn Occ3D Ground Truth
-    candidate_occ = [
+    candidate_occ = []
+    if os.path.exists('/kaggle/input'):
+        for root, _, files in os.walk('/kaggle/input'):
+            if 'labels.npz' in files:
+                # root có dạng /kaggle/input/<dataset>/gts/scene-0061/<token>
+                # Thư mục gốc nhãn thường là /kaggle/input/<dataset>
+                parts = root.split(os.sep)
+                if 'gts' in parts:
+                    idx = parts.index('gts')
+                    candidate_occ.append(os.sep.join(parts[:idx+1]))
+                    candidate_occ.append(os.sep.join(parts[:idx]))
+                else:
+                    candidate_occ.append(root)
+                break
+
+    candidate_occ.extend([
         "/kaggle/input/occ3d-mini-gts",
         "/kaggle/input/occ3d-nuscenes-mini",
         "/kaggle/working/CV4D/data/occ3d_cam4d",
         "data/occ3d_cam4d",
         os.path.join(data_root, 'gts')
-    ]
+    ])
     occ_gt_root = next((p for p in candidate_occ if os.path.exists(p)), "data/occ3d_cam4d")
-    print(f"[Data] Thư mục nhãn Occ3D: {occ_gt_root}")
+    print(f"[Data] Thư mục nhãn Occ3D phát hiện được: {occ_gt_root}")
 
     # 3. Tạo cache metadata nếu dùng data thật
     cache_path = "data/cache/nuscenes_infos_val.pkl"
