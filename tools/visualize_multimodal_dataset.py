@@ -134,6 +134,8 @@ class NuScenesMultiModalVisualizer:
         # Đọc các bảng quan hệ nuScenes
         with open(os.path.join(self.json_dir, 'sample.json'), 'r') as f:
             self.samples = {s['token']: s for s in json.load(f)}
+        with open(os.path.join(self.json_dir, 'scene.json'), 'r') as f:
+            self.scenes = {s['name']: s for s in json.load(f)}
         with open(os.path.join(self.json_dir, 'sample_data.json'), 'r') as f:
             self.sample_data = json.load(f)
         with open(os.path.join(self.json_dir, 'calibrated_sensor.json'), 'r') as f:
@@ -169,7 +171,23 @@ class NuScenesMultiModalVisualizer:
                 return sd
         return None
 
-    def render_bev_lidar_gt_and_pred(self, sample_token, save_path=None, x_range=(-50, 50), y_range=(-50, 50)):
+    def get_scene_consecutive_tokens(self, scene_name='scene-0061'):
+        """Lấy toàn bộ chuỗi frame liên tiếp tối đa từ first_sample_token đến hết scene"""
+        if scene_name in self.scenes:
+            sc = self.scenes[scene_name]
+        else:
+            matched = [s for s in self.scenes.values() if scene_name in s['name']]
+            sc = matched[0] if matched else next(iter(self.scenes.values()))
+            
+        tokens = []
+        curr = sc['first_sample_token']
+        while curr:
+            tokens.append(curr)
+            curr = self.samples.get(curr, {}).get('next', '')
+        print(f"[Scene Sequence] Scene '{sc['name']}': Chuỗi {len(tokens)} keyframes liên tiếp tối đa (Thời lượng: ~{len(tokens)*0.5:.1f}s)")
+        return tokens
+
+    def render_bev_lidar_gt_and_pred(self, sample_token, save_path=None, return_img=False, dpi=120, x_range=(-50, 50), y_range=(-50, 50)):
         """
         Vẽ bản đồ BEV LiDAR Point Cloud kết hợp 3D Bounding Boxes
         Tái hiện chính xác phong cách đồ thị kiểm thử của xe tự hành (như ảnh tham khảo):
@@ -181,7 +199,7 @@ class NuScenesMultiModalVisualizer:
         - Orange/Red/Magenta = Model Predictions kèm mũi tên vận tốc
         - Xe chủ EGO: Tam giác màu xanh lơ tại gốc (0, 0)
         """
-        fig, ax = plt.subplots(figsize=(11, 11), facecolor='#000000')
+        fig, ax = plt.subplots(figsize=(10, 10), facecolor='#000000')
         ax.set_facecolor('#000000')
 
         # 1. Nạp điểm LiDAR từ file .pcd.bin
@@ -315,11 +333,19 @@ class NuScenesMultiModalVisualizer:
         ax.legend(loc='upper right', facecolor='#111111', edgecolor='#444444', labelcolor='#ffffff', fontsize=9)
 
         plt.tight_layout()
+        img_bgr = None
+        if return_img or not save_path:
+            fig.canvas.draw()
+            rgba = np.asarray(fig.canvas.buffer_rgba())
+            img_bgr = cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
+
         if save_path:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            plt.savefig(save_path, dpi=200, facecolor='#000000', edgecolor='none')
+            plt.savefig(save_path, dpi=dpi, facecolor='#000000', edgecolor='none')
             print(f"[BEV LiDAR] Đã lưu bản đồ BEV chuẩn ảnh mẫu tại: {save_path}")
-        return fig
+
+        plt.close(fig)
+        return img_bgr if return_img else fig
 
     def render_camera_with_3d_boxes(self, sample_token, channel='CAM_FRONT', save_path=None):
         """
@@ -408,12 +434,8 @@ class NuScenesMultiModalVisualizer:
 
         top_row = np.hstack([cl_small, cf_small, cr_small]) # [target_h, target_w * 3, 3]
 
-        # 2. Render BEV LiDAR ra ảnh đệm
-        bev_temp_path = os.path.join(self.output_dir, 'visualization', 'temp_bev.png')
-        self.render_bev_lidar_gt_and_pred(sample_token, save_path=bev_temp_path)
-        bev_img = cv2.imread(bev_temp_path)
-        if os.path.exists(bev_temp_path):
-            os.remove(bev_temp_path)
+        # 2. Render BEV LiDAR trực tiếp trong RAM (cực nhanh, không ghi đĩa)
+        bev_img = self.render_bev_lidar_gt_and_pred(sample_token, return_img=True, dpi=100)
 
         # 3. Nạp ảnh 3D Isometric đã render trước đó nếu có
         iso_path = os.path.join(self.output_dir, 'visualization', 'occupancy_3d_isometric.png')
@@ -437,82 +459,124 @@ class NuScenesMultiModalVisualizer:
 
         return dashboard
 
-    def render_multimodal_4d_video(self, sample_tokens, output_video_path, output_gif_path, fps=2):
-        """Render video chuỗi thời gian liên tục qua các frames"""
+    def render_camera_video(self, sample_tokens, output_video_path, fps=4):
+        """Render video liên tục góc nhìn Camera trước với 3D Bounding Boxes"""
         rendered_frames = []
-        print(f"\n[Multi-Modal Video] Bắt đầu tạo video đa cảm biến cho {len(sample_tokens)} frames...")
+        print(f"\n[Camera 3D Video] Render {len(sample_tokens)} frames góc nhìn Camera trước...")
+        for idx, stok in enumerate(sample_tokens):
+            if (idx + 1) % 5 == 0 or idx == 0 or idx == len(sample_tokens) - 1:
+                print(f"  --> Camera Frame [{idx+1}/{len(sample_tokens)}]")
+            frame_bgr = self.render_camera_with_3d_boxes(stok, channel='CAM_FRONT')
+            if frame_bgr is not None:
+                # Resize nhẹ để tối ưu dung lượng video
+                frame_resized = cv2.resize(frame_bgr, (1280, 720))
+                rendered_frames.append(cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB))
+        if rendered_frames:
+            imageio.mimwrite(output_video_path, rendered_frames, fps=fps, codec='libx264', quality=8)
+            print(f"[Camera 3D Video] Đã lưu video tại: {output_video_path}")
+
+    def render_bev_lidar_video(self, sample_tokens, output_video_path, fps=4):
+        """Render video liên tục góc nhìn BEV LiDAR Point Cloud + Bounding Boxes"""
+        rendered_frames = []
+        print(f"\n[BEV LiDAR Video] Render {len(sample_tokens)} frames góc nhìn BEV LiDAR...")
+        for idx, stok in enumerate(sample_tokens):
+            if (idx + 1) % 5 == 0 or idx == 0 or idx == len(sample_tokens) - 1:
+                print(f"  --> BEV Frame [{idx+1}/{len(sample_tokens)}]")
+            bev_bgr = self.render_bev_lidar_gt_and_pred(stok, return_img=True, dpi=100)
+            if bev_bgr is not None:
+                rendered_frames.append(cv2.cvtColor(bev_bgr, cv2.COLOR_BGR2RGB))
+        if rendered_frames:
+            imageio.mimwrite(output_video_path, rendered_frames, fps=fps, codec='libx264', quality=8)
+            print(f"[BEV LiDAR Video] Đã lưu video tại: {output_video_path}")
+
+    def render_multimodal_4d_video(self, sample_tokens, output_video_path, output_gif_path=None, fps=4):
+        """Render video chuỗi thời gian liên tục qua các frames (Master Dashboard)"""
+        rendered_frames = []
+        print(f"\n[Multi-Modal Dashboard Video] Bắt đầu render {len(sample_tokens)} frames liên tiếp...")
         
         for idx, stok in enumerate(sample_tokens):
-            print(f"  --> Đang xử lý Frame [{idx+1}/{len(sample_tokens)}] ({stok[:16]}...)")
+            if (idx + 1) % 5 == 0 or idx == 0 or idx == len(sample_tokens) - 1:
+                print(f"  --> Dashboard Frame [{idx+1}/{len(sample_tokens)}] ({stok[:12]}...)")
             dash = self.render_integrated_multimodal_dashboard(stok)
-            # Chuyển BGR sang RGB cho video writer
             dash_rgb = cv2.cvtColor(dash, cv2.COLOR_BGR2RGB)
             rendered_frames.append(dash_rgb)
 
         # Xuất MP4
         try:
-            imageio.mimwrite(output_video_path, rendered_frames, fps=fps, codec='libx264', quality=9)
+            imageio.mimwrite(output_video_path, rendered_frames, fps=fps, codec='libx264', quality=8)
             print(f"[Video MP4] Đã xuất video tại: {output_video_path}")
         except Exception as e:
             print(f"[Video MP4] Lỗi lưu MP4 ({e})")
 
-        # Xuất GIF
-        pil_frames = [Image.fromarray(f) for f in rendered_frames]
-        pil_frames[0].save(
-            output_gif_path,
-            save_all=True,
-            append_images=pil_frames[1:],
-            duration=int(1000 / fps),
-            loop=0
-        )
-        print(f"[Video GIF] Đã xuất ảnh động GIF tại: {output_gif_path}")
+        # Xuất GIF nếu có yêu cầu (chỉ với số frame vừa phải để tránh quá nặng)
+        if output_gif_path and len(rendered_frames) <= 15:
+            pil_frames = [Image.fromarray(f) for f in rendered_frames]
+            pil_frames[0].save(
+                output_gif_path,
+                save_all=True,
+                append_images=pil_frames[1:],
+                duration=int(1000 / fps),
+                loop=0
+            )
+            print(f"[Video GIF] Đã xuất ảnh động GIF tại: {output_gif_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="VinFast ADAS Multi-Modal Perception Visualizer")
     parser.add_argument('--data-root', type=str, default='data/nuscenes', help="Thư mục dữ liệu nuScenes")
     parser.add_argument('--model-output', type=str, default='model_output', help="Thư mục kết quả model_output")
     parser.add_argument('--vis-dir', type=str, default='model_output/visualization', help="Thư mục lưu hình ảnh")
+    parser.add_argument('--scene-name', type=str, default='scene-0061', help="Tên scene trong dataset (mặc định: scene-0061)")
+    parser.add_argument('--all-frames', action='store_true', default=True, help="Lấy tối đa tất cả các frames liên tiếp trong scene")
+    parser.add_argument('--num-frames', type=int, default=-1, help="Số frame muốn render (-1 = tối đa)")
+    parser.add_argument('--fps', type=int, default=4, help="Số khung hình trên giây (FPS)")
     args = parser.parse_args()
 
     os.makedirs(args.vis_dir, exist_ok=True)
 
     visualizer = NuScenesMultiModalVisualizer(data_root=args.data_root, model_output_dir=args.model_output)
 
-    # 5 frames trong chuỗi thời gian của scene-0061
-    frame_tokens = [
-        'ca9a282c9e77460f8360f564131a8af5',
-        '39586f9d59004284a7114a68825e8eec',
-        '356d81f38dd9473ba590f39e266f54e5',
-        'e0845f5322254dafadbbed75aaa07969',
-        'c923fe08b2ff4e27975d2bf30934383b'
-    ]
+    # Lấy chuỗi frame liên tiếp tối đa từ scene
+    consecutive_tokens = visualizer.get_scene_consecutive_tokens(args.scene_name)
+    if args.num_frames > 0:
+        consecutive_tokens = consecutive_tokens[:args.num_frames]
 
-    first_frame = frame_tokens[0]
+    print(f"\n[INFO] Đang xử lý chuỗi {len(consecutive_tokens)} frame liên tiếp của {args.scene_name}")
 
-    # 1. Xuất ảnh Camera trước kèm hộp 3D Bounding Box
+    first_frame = consecutive_tokens[0]
+
+    # 1. Cập nhật các ảnh tĩnh tiêu chuẩn cho frame đầu tiên
     cam_box_path = os.path.join(args.vis_dir, 'camera_front_3d_boxes.png')
     visualizer.render_camera_with_3d_boxes(first_frame, 'CAM_FRONT', save_path=cam_box_path)
 
-    # 2. Xuất bản đồ BEV LiDAR Point Cloud + 3D Bounding Boxes (chuẩn phong cách ảnh tham khảo của user)
     bev_lidar_path = os.path.join(args.vis_dir, 'bev_lidar_groundtruth_pred.png')
     visualizer.render_bev_lidar_gt_and_pred(first_frame, save_path=bev_lidar_path)
 
-    # 3. Xuất màn hình tổng hợp Đa Cảm Biến All-in-One Dashboard
     dashboard_path = os.path.join(args.vis_dir, 'multimodal_adas_dashboard.png')
     visualizer.render_integrated_multimodal_dashboard(first_frame, save_path=dashboard_path)
 
-    # 4. Xuất Video MP4 và GIF chuỗi thời gian chuyển động đa cảm biến (5 frames)
-    video_path = os.path.join(args.vis_dir, 'multimodal_perception_video.mp4')
-    gif_path = os.path.join(args.vis_dir, 'multimodal_perception_animation.gif')
-    visualizer.render_multimodal_4d_video(frame_tokens, video_path, gif_path, fps=2)
+    # 2. Render Video Toàn Cảnh Tối Đa Khung Hình (Master Dashboard)
+    full_dash_video = os.path.join(args.vis_dir, 'full_scene_multimodal_video.mp4')
+    visualizer.render_multimodal_4d_video(consecutive_tokens, full_dash_video, fps=args.fps)
+
+    # Đồng bộ sang multimodal_perception_video.mp4 để Web Dashboard tự động nạp
+    sync_video_path = os.path.join(args.vis_dir, 'multimodal_perception_video.mp4')
+    if os.path.exists(full_dash_video):
+        import shutil
+        shutil.copyfile(full_dash_video, sync_video_path)
+
+    # 3. Render Video Camera Trước với 3D Bounding Boxes
+    full_cam_video = os.path.join(args.vis_dir, 'full_scene_camera_video.mp4')
+    visualizer.render_camera_video(consecutive_tokens, full_cam_video, fps=args.fps)
+
+    # 4. Render Video BEV LiDAR Point Cloud + 3D Boxes
+    full_bev_video = os.path.join(args.vis_dir, 'full_scene_bev_lidar_video.mp4')
+    visualizer.render_bev_lidar_video(consecutive_tokens, full_bev_video, fps=args.fps)
 
     print("\n" + "="*80)
-    print("  TOÀN BỘ SẢN PHẨM TRỰC QUAN HÓA ĐA CẢM BIẾN ĐÃ HOÀN TẤT!")
-    print(f"  1. Ảnh Camera thực tế chiếu hộp 3D  : {cam_box_path}")
-    print(f"  2. Bản đồ BEV LiDAR + Hộp GT & Pred : {bev_lidar_path} (Chuẩn ảnh mẫu)")
-    print(f"  3. Dashboard Tổng Hợp Đa Cảm Biến   : {dashboard_path}")
-    print(f"  4. Video Đa Cảm Biến Chuỗi 4D (MP4) : {video_path}")
-    print(f"  5. Ảnh động Đa Cảm Biến 4D (GIF)    : {gif_path}")
+    print(f"  HOÀN THÀNH XUẤT VIDEO CHUỖI TỐI ĐA {len(consecutive_tokens)} FRAMES LIÊN TIẾP ({args.scene_name})!")
+    print(f"  1. Master Dashboard Video (Toàn cảnh) : {full_dash_video}")
+    print(f"  2. Camera 3D Boxes Video (Kính lái)  : {full_cam_video}")
+    print(f"  3. BEV LiDAR Point Cloud Video        : {full_bev_video}")
     print("="*80)
 
 if __name__ == '__main__':

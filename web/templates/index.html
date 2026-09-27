@@ -283,15 +283,17 @@
                     <div class="card-title">
                         <span>🎬</span> Rạp chiếu 4D Spatio-Temporal Perception Cinema
                     </div>
-                    <div class="card-actions">
-                        <button class="btn btn-secondary btn-sm video-switch-btn active" data-src="/files/visualization/multimodal_perception_video.mp4">Perception Sync Video</button>
-                        <button class="btn btn-secondary btn-sm video-switch-btn" data-src="/files/visualization/flow_4d_video.mp4">4D Voxel Flow Video</button>
+                    <div class="card-actions" style="flex-wrap: wrap;">
+                        <button class="btn btn-secondary btn-sm video-switch-btn active" data-src="/files/visualization/full_scene_multimodal_video.mp4">🚘 Toàn cảnh 39 Frames (Dashboard)</button>
+                        <button class="btn btn-secondary btn-sm video-switch-btn" data-src="/files/visualization/full_scene_camera_video.mp4">📷 Camera Kính lái 39 Frames (720p HD)</button>
+                        <button class="btn btn-secondary btn-sm video-switch-btn" data-src="/files/visualization/full_scene_bev_lidar_video.mp4">🛰️ BEV LiDAR 39 Frames</button>
+                        <button class="btn btn-secondary btn-sm video-switch-btn" data-src="/files/visualization/flow_4d_video.mp4">🌀 4D Voxel Flow</button>
                     </div>
                 </div>
 
                 <div class="video-wrapper">
                     <video id="main-video-player" controls autoplay loop playsinline>
-                        <source src="/files/visualization/multimodal_perception_video.mp4" type="video/mp4">
+                        <source src="/files/visualization/full_scene_multimodal_video.mp4" type="video/mp4">
                         Trình duyệt của bạn không hỗ trợ thẻ video HTML5.
                     </video>
                     <div class="video-controls-bar">

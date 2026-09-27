@@ -185,8 +185,10 @@ def api_artifacts():
     featured = [
         {"name": "bev_lidar_groundtruth_pred.png", "folder": VIS_DIR, "type": "Image", "category": "LiDAR BEV", "desc": "BEV LiDAR Point Cloud vs 3D Boxes (Ground Truth vs Model Prediction)"},
         {"name": "camera_front_3d_boxes.png", "folder": VIS_DIR, "type": "Image", "category": "Camera", "desc": "RGB Camera Front với 3D Wireframe Bounding Box chiếu hình học"},
-        {"name": "multimodal_adas_dashboard.png", "folder": VIS_DIR, "type": "Image", "category": "Master Dashboard", "desc": "Tổ hợp 3 Camera + LiDAR BEV + 3D Occupancy Flow"},
-        {"name": "multimodal_perception_video.mp4", "folder": VIS_DIR, "type": "Video", "category": "Video 4D", "desc": "Video 4D đồng bộ đa cảm biến theo thời gian (T=5 timesteps)"},
+        {"name": "full_scene_multimodal_video.mp4", "folder": VIS_DIR, "type": "Video", "category": "Full Scene 39F", "desc": "Video toàn cảnh 39 frames liên tiếp tối đa (Master Dashboard, 4 FPS)"},
+        {"name": "full_scene_camera_video.mp4", "folder": VIS_DIR, "type": "Video", "category": "Full Scene 39F", "desc": "Video Camera trước 39 frames liên tiếp với 3D Wireframe Boxes (720p HD)"},
+        {"name": "full_scene_bev_lidar_video.mp4", "folder": VIS_DIR, "type": "Video", "category": "Full Scene 39F", "desc": "Video BEV LiDAR Point Cloud 39 frames liên tiếp kèm hộp theo dõi"},
+        {"name": "multimodal_perception_video.mp4", "folder": VIS_DIR, "type": "Video", "category": "Video 4D", "desc": "Video 4D đồng bộ đa cảm biến theo thời gian (Master sequence)"},
         {"name": "multimodal_perception_animation.gif", "folder": VIS_DIR, "type": "Animation", "category": "Animation", "desc": "Ảnh động GIF chuỗi nhận diện thời gian thực"},
         {"name": "interactive_3d_occupancy.html", "folder": VIS_DIR, "type": "HTML/WebGL", "category": "Interactive 3D", "desc": "Mô hình 3D Voxel xoay 360 độ tương tác Plotly WebGL"},
         {"name": "flow_4d_video.mp4", "folder": VIS_DIR, "type": "Video", "category": "Video 4D", "desc": "Video trường chuyển động vector 4D Occupancy Flow"},
