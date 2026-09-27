@@ -22,16 +22,18 @@ import imageio
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-# Bảng màu các lớp đối tượng trực quan cho người dùng
+# Bảng màu chuẩn phân loại đa đối tượng (Color Palette & Taxonomy)
 CLASS_COLORS = {
-    'car': ([0, 180, 255], 'Xe hơi (Car)'),
-    'truck': ([255, 140, 0], 'Xe tải (Truck)'),
-    'bus': ([255, 215, 0], 'Xe buýt (Bus)'),
-    'motorcycle': ([255, 60, 60], 'Xe máy (Motorcycle)'),
-    'bicycle': ([50, 205, 50], 'Xe đạp (Bicycle)'),
-    'pedestrian': ([255, 50, 150], 'Người đi bộ (Pedestrian)'),
-    'barrier': ([180, 180, 180], 'Dải phân cách (Barrier)'),
-    'traffic_cone': ([255, 100, 0], 'Cọc tiêu (Traffic Cone)'),
+    'car': ([0, 190, 255], '#00BEFF', 'Car', 'Xe hơi'),
+    'truck': ([255, 122, 0], '#FF7A00', 'Truck', 'Xe tải'),
+    'bus': ([255, 215, 0], '#FFD700', 'Bus', 'Xe buýt'),
+    'motorcycle': ([255, 45, 85], '#FF2D55', 'Moto', 'Xe máy'),
+    'bicycle': ([0, 255, 136], '#00FF88', 'Bike', 'Xe đạp'),
+    'pedestrian': ([255, 0, 128], '#FF0080', 'Ped', 'Người đi bộ'),
+    'barrier': ([160, 174, 192], '#A0AEC0', 'Barrier', 'Dải phân cách'),
+    'traffic_cone': ([255, 90, 0], '#FF5A00', 'Cone', 'Cọc tiêu'),
+    'construction_vehicle': ([218, 165, 32], '#DAA520', 'ConstTruck', 'Xe công trường'),
+    'trailer': ([157, 78, 221], '#9D4EDD', 'Trailer', 'Rơ-moóc'),
 }
 
 def quat_to_matrix(q):
@@ -163,7 +165,33 @@ class NuScenesMultiModalVisualizer:
             if stok not in self.sample_to_anns:
                 self.sample_to_anns[stok] = []
             self.sample_to_anns[stok].append(a)
+
+        # Bộ nhớ theo dõi ID đối tượng xuyên suốt các frame (Persistent Tracking Cache)
+        self.instance_id_map = {}
+        self.instance_counter = 1
             
+    def get_simple_category(self, cat_name):
+        """Quy đổi tên danh mục chi tiết sang phân lớp chuẩn ngắn gọn"""
+        cat_lower = cat_name.lower()
+        if 'car' in cat_lower: return 'car'
+        if 'pedestrian' in cat_lower or 'human' in cat_lower: return 'pedestrian'
+        if 'truck' in cat_lower: return 'truck'
+        if 'bus' in cat_lower: return 'bus'
+        if 'motorcycle' in cat_lower: return 'motorcycle'
+        if 'bicycle' in cat_lower: return 'bicycle'
+        if 'barrier' in cat_lower: return 'barrier'
+        if 'traffic_cone' in cat_lower or 'cone' in cat_lower: return 'traffic_cone'
+        if 'construction' in cat_lower: return 'construction_vehicle'
+        if 'trailer' in cat_lower: return 'trailer'
+        return 'car'
+
+    def get_instance_id(self, inst_token):
+        """Cấp phát hoặc trả về ID định danh duy nhất cố định cho từng đối tượng qua thời gian"""
+        if inst_token not in self.instance_id_map:
+            self.instance_id_map[inst_token] = self.instance_counter
+            self.instance_counter += 1
+        return self.instance_id_map[inst_token]
+
     def get_sample_sensor_data(self, sample_token, channel):
         """Lấy bản ghi sample_data cho một sensor cụ thể"""
         for sd in self.sample_data:
@@ -184,7 +212,13 @@ class NuScenesMultiModalVisualizer:
         while curr:
             tokens.append(curr)
             curr = self.samples.get(curr, {}).get('next', '')
-        print(f"[Scene Sequence] Scene '{sc['name']}': Chuỗi {len(tokens)} keyframes liên tiếp tối đa (Thời lượng: ~{len(tokens)*0.5:.1f}s)")
+        
+        # Tiền gán ID định danh duy nhất theo thứ tự xuất hiện thời gian
+        for stok in tokens:
+            for a in self.sample_to_anns.get(stok, []):
+                self.get_instance_id(a['instance_token'])
+
+        print(f"[Scene Sequence] Scene '{sc['name']}': Chuỗi {len(tokens)} keyframes liên tiếp tối đa (Thời lượng: ~{len(tokens)*0.5:.1f}s, Định danh: {len(self.instance_id_map)} đối tượng)")
         return tokens
 
     def render_bev_lidar_gt_and_pred(self, sample_token, save_path=None, return_img=False, dpi=120, x_range=(-50, 50), y_range=(-50, 50)):
@@ -240,10 +274,20 @@ class NuScenesMultiModalVisualizer:
         R_ego = quat_to_matrix(ego_pose['rotation'])
         t_ego = np.array(ego_pose['translation'])
 
-        # 3. Vẽ các hộp Ground Truth (MÀU XANH LÁ - GREEN = GT)
+        # 3. Vẽ các hộp Ground Truth PHÂN BIỆT THEO MÀU NGỮ NGHĨA & ID ĐỊNH DANH DUY NHẤT
         anns = self.sample_to_anns.get(sample_token, [])
-        gt_count = 0
+        used_legend_classes = set()
+        
         for a in anns:
+            inst_token = a['instance_token']
+            cat_name = self.categories.get(self.instances[inst_token]['category_token'], 'object')
+            simple_cat = self.get_simple_category(cat_name)
+            obj_id = self.get_instance_id(inst_token)
+
+            rgb_tuple, hex_color, short_name, vi_name = CLASS_COLORS.get(
+                simple_cat, ([0, 255, 0], '#00FF66', 'Obj', 'Vật thể')
+            )
+
             c_glob = get_box_corners_3d(a['translation'], a['size'], a['rotation'])
             c_ego = np.dot(R_ego.T, c_glob - t_ego.reshape(3, 1))
             
@@ -258,17 +302,34 @@ class NuScenesMultiModalVisualizer:
             # Vẽ đa giác hộp 2D
             rect_x = [by_left[0], by_left[1], by_left[2], by_left[3], by_left[0]]
             rect_y = [bx_fwd[0], bx_fwd[1], bx_fwd[2], bx_fwd[3], bx_fwd[0]]
-            ax.plot(rect_x, rect_y, color='#00ff44', linewidth=1.6, label='Ground Truth (GT)' if gt_count == 0 else "")
+            
+            label_leg = f"{vi_name} ({short_name})" if simple_cat not in used_legend_classes else ""
+            used_legend_classes.add(simple_cat)
+
+            # Vẽ viền hộp theo màu semantic của từng loại đối tượng
+            ax.plot(rect_x, rect_y, color=hex_color, linewidth=2.0, label=label_leg, zorder=5)
+            ax.fill(rect_x, rect_y, color=hex_color, alpha=0.18, zorder=4)
             
             # Vẽ đường chỉ hướng mũi xe GT (Front face: cạnh 0-1)
             front_mid_x = (by_left[0] + by_left[1]) / 2.0
             front_mid_y = (bx_fwd[0] + bx_fwd[1]) / 2.0
-            center_x = np.mean(by_left)
-            center_y = np.mean(bx_fwd)
-            ax.plot([center_x, front_mid_x], [center_y, front_mid_y], color='#00ff44', linewidth=1.2)
-            gt_count += 1
+            center_x = float(np.mean(by_left))
+            center_y = float(np.mean(bx_fwd))
+            ax.plot([center_x, front_mid_x], [center_y, front_mid_y], color='#FFFFFF', linewidth=1.4, zorder=6)
 
-        # 4. Vẽ các hộp Mô hình Dự đoán (MÀU CAM / ĐỎ / HỒNG KÈM VECTOR MŨI TÊN VẬN TỐC)
+            # NHÃN ĐỊNH DANH DUY NHẤT XUYÊN SUỐT CÁC FRAME (VD: Car#03, Ped#01, Truck#08)
+            dist_to_ego = (center_x**2 + center_y**2)**0.5
+            if dist_to_ego < 45.0:
+                tag_label = f"{short_name}#{obj_id:02d}"
+                ax.text(
+                    center_x, center_y, tag_label,
+                    color='#FFFFFF', fontsize=6.5, fontweight='bold',
+                    ha='center', va='center',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor=hex_color, edgecolor='#FFFFFF', alpha=0.9, linewidth=0.6),
+                    zorder=7
+                )
+
+        # 4. Vẽ các hộp Mô hình Dự đoán (VIỀN NÉT ĐỨT CAM/ĐỎ + VECTOR VẬN TỐC)
         pred_boxes = self.pred_bboxes.get(sample_token, [])
         pred_count = 0
         for pbox in pred_boxes:
@@ -284,24 +345,32 @@ class NuScenesMultiModalVisualizer:
                 continue
                 
             l, w_dim = dim[0], dim[1]
-            # Hộp chữ nhật BEV
             hw, hl = w_dim / 2.0, l / 2.0
             poly_x = [by_left_c - hw, by_left_c + hw, by_left_c + hw, by_left_c - hw, by_left_c - hw]
             poly_y = [bx_fwd_c - hl, bx_fwd_c - hl, bx_fwd_c + hl, bx_fwd_c + hl, bx_fwd_c - hl]
             
-            # Đổi màu cam/đỏ theo vận tốc
             speed_val = np.linalg.norm(vel)
-            p_color = '#ff8800' if speed_val < 1.0 else '#ff0055'
-            ax.plot(poly_x, poly_y, color=p_color, linewidth=1.8, label='Predicted (Model)' if pred_count == 0 else "")
+            p_color = '#FF5500' if speed_val < 1.0 else '#FF1493'
+            # Nét đứt rõ ràng để phân biệt với Ground Truth nét liền
+            ax.plot(poly_x, poly_y, color=p_color, linestyle='--', linewidth=2.2, label='Pred Model (Dashed)' if pred_count == 0 else "", zorder=8)
             
-            # Vẽ vector vận tốc / hướng chuyển động (mũi tên có đầu tròn như ảnh mẫu)
+            # Vẽ vector vận tốc / hướng chuyển động (mũi tên có đầu tròn)
             vx_fwd = vel[1]
             vy_left = -vel[0]
             arrow_scale = 3.5
             end_x = by_left_c + vy_left * arrow_scale
             end_y = bx_fwd_c + vx_fwd * arrow_scale
-            ax.plot([by_left_c, end_x], [bx_fwd_c, end_y], color=p_color, linewidth=2.0)
-            ax.scatter([end_x], [end_y], color=p_color, s=25, zorder=5)
+            ax.plot([by_left_c, end_x], [bx_fwd_c, end_y], color=p_color, linewidth=2.2, zorder=9)
+            ax.scatter([end_x], [end_y], color=p_color, s=28, zorder=10)
+            
+            # Nhãn PRED
+            ax.text(
+                by_left_c, bx_fwd_c + hl + 1.2, f"PRED {pbox.get('class', '')}",
+                color='#FFFFFF', fontsize=6.5, fontweight='bold',
+                ha='center', va='bottom',
+                bbox=dict(boxstyle='square,pad=0.15', facecolor=p_color, edgecolor='none', alpha=0.9),
+                zorder=11
+            )
             pred_count += 1
 
         # 5. Vẽ Xe chủ EGO tại gốc tọa độ (0, 0)
@@ -328,9 +397,9 @@ class NuScenesMultiModalVisualizer:
         ax.tick_params(colors='#ffffff', labelsize=10)
         ax.grid(color='#222222', linestyle='-', linewidth=0.5)
 
-        title_str = f"VINFAST ADAS 4D-OccFusion Perception on nuScenes val\ngreen = GT | orange/red = Predicted (with motion vector)"
-        ax.set_title(title_str, color='#ffffff', fontsize=13, fontweight='bold', pad=15)
-        ax.legend(loc='upper right', facecolor='#111111', edgecolor='#444444', labelcolor='#ffffff', fontsize=9)
+        title_str = f"VINFAST ADAS 4D-OccFusion Perception on nuScenes val\nMulti-Class Semantic 3D Boxes & Persistent Tracking IDs (#01, #02...)"
+        ax.set_title(title_str, color='#ffffff', fontsize=12, fontweight='bold', pad=14)
+        ax.legend(loc='upper right', facecolor='#111111', edgecolor='#444444', labelcolor='#ffffff', fontsize=8, ncol=2)
 
         plt.tight_layout()
         img_bgr = None
@@ -374,27 +443,24 @@ class NuScenesMultiModalVisualizer:
         t_cam = np.array(calib['translation'])
         K = np.array(calib['camera_intrinsic'])
 
-        # Chiếu các hộp Ground Truth
+        # Chiếu các hộp Ground Truth được PHÂN LOẠI MÀU & ĐỊNH DANH ID THEO DÕI
         anns = self.sample_to_anns.get(sample_token, [])
         for a in anns:
-            cat_name = self.categories.get(self.instances[a['instance_token']]['category_token'], 'object')
-            simple_cat = cat_name.split('.')[-1]
-            if 'car' in cat_name: simple_cat = 'car'
-            elif 'pedestrian' in cat_name: simple_cat = 'pedestrian'
-            elif 'truck' in cat_name: simple_cat = 'truck'
-            elif 'bus' in cat_name: simple_cat = 'bus'
-            elif 'motorcycle' in cat_name: simple_cat = 'motorcycle'
-            elif 'bicycle' in cat_name: simple_cat = 'bicycle'
+            inst_token = a['instance_token']
+            cat_name = self.categories.get(self.instances[inst_token]['category_token'], 'object')
+            simple_cat = self.get_simple_category(cat_name)
+            obj_id = self.get_instance_id(inst_token)
 
             c_glob = get_box_corners_3d(a['translation'], a['size'], a['rotation'])
             pts_2d, corners_cam = project_box_to_camera(c_glob, R_ego, t_ego, R_cam, t_cam, K, w, h)
             
             if pts_2d is not None:
                 dist_m = float(np.mean(corners_cam[2, :]))
-                color_bgr = CLASS_COLORS.get(simple_cat, ([0, 255, 0], 'obj'))[0]
-                # Đổi RGB sang BGR cho OpenCV
-                bgr = (color_bgr[2], color_bgr[1], color_bgr[0])
-                label_txt = CLASS_COLORS.get(simple_cat, (None, simple_cat.capitalize()))[1]
+                rgb_tuple, hex_color, short_name, vi_name = CLASS_COLORS.get(
+                    simple_cat, ([0, 255, 0], '#00FF66', 'Obj', 'Vật thể')
+                )
+                bgr = (rgb_tuple[2], rgb_tuple[1], rgb_tuple[0])
+                label_txt = f"{short_name} #{obj_id:02d}"
                 draw_3d_box_on_image(annotated_img, pts_2d, color_bgr=bgr, thickness=2, label=label_txt, dist_m=dist_m)
 
         # Chèn dải băng HUD thông số trên camera
