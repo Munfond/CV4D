@@ -35,6 +35,24 @@ def main():
         print("[Lưu ý] Không phát hiện GPU, pipeline sẽ chạy trên CPU (chậm hơn).")
 
     # 2. Kiểm tra thư mục dữ liệu trên Kaggle
+    target_nuscenes = "/kaggle/working/data/nuscenes"
+    if (not os.path.exists(target_nuscenes) or len(os.listdir(target_nuscenes)) == 0) and os.path.exists('/kaggle/input'):
+        for root, _, files in os.walk('/kaggle/input'):
+            for f in files:
+                if f.endswith(('.tgz', '.tar.gz', '.zip')) and ('mini' in f.lower() or 'nuscenes' in f.lower()):
+                    archive_path = os.path.join(root, f)
+                    print(f"[Data] Tìm thấy file nén nuScenes: {archive_path}")
+                    print(f"--> Đang tự động giải nén sang {target_nuscenes}...")
+                    os.makedirs(target_nuscenes, exist_ok=True)
+                    if f.endswith(('.tgz', '.tar.gz')):
+                        subprocess.run(f'tar -xzf "{archive_path}" -C "{target_nuscenes}"', shell=True)
+                    elif f.endswith('.zip'):
+                        subprocess.run(f'unzip -q "{archive_path}" -d "{target_nuscenes}"', shell=True)
+                    print(f"[Data] Đã tự động giải nén hoàn tất!")
+                    break
+            if os.path.exists(target_nuscenes) and len(os.listdir(target_nuscenes)) > 0:
+                break
+
     candidate_nuscenes = [
         "/kaggle/working/data/nuscenes",
         "/kaggle/input/mini-nuscenes",
@@ -42,7 +60,7 @@ def main():
         "/kaggle/input/nuscenes",
         "data/nuscenes"
     ]
-    data_root = next((p for p in candidate_nuscenes if os.path.exists(p)), None)
+    data_root = next((p for p in candidate_nuscenes if os.path.exists(p) and len(os.listdir(p)) > 0), None)
     
     use_synthetic = True
     if data_root is not None:
