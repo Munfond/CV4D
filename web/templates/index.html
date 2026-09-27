@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VinFast ADAS 4D-OccFusion Lab | Web Portal</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+    <!-- TOP NAVBAR -->
+    <header class="navbar">
+        <div class="brand">
+            <div class="brand-badge">VINFAST ADAS</div>
+            <div>
+                <div class="brand-title">4D-OccFusion Perception Portal</div>
+                <div class="brand-sub">Hệ thống Trực quan hóa Đa Phương thức Thời gian thực</div>
+            </div>
+        </div>
+        <div class="nav-status">
+            <div class="status-chip">
+                <span class="status-dot"></span>
+                <span>Scene: <strong id="info-scene">scene-0061</strong></span>
+            </div>
+            <div class="status-chip">
+                <span>Dataset: <strong id="info-dataset">nuScenes-mini</strong></span>
+            </div>
+            <div class="status-chip">
+                <span>Voxel: <strong id="info-grid">200x200x16 (0.4m)</strong></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="tabs-container">
+        <button class="tab-btn active" data-tab="tab-overview">
+            <span>📊</span> Tổng quan Dashboard
+        </button>
+        <button class="tab-btn" data-tab="tab-lidar">
+            <span>🛰️</span> LiDAR BEV & 3D Boxes
+        </button>
+        <button class="tab-btn" data-tab="tab-camera">
+            <span>📷</span> Camera 3D Wireframes
+        </button>
+        <button class="tab-btn" data-tab="tab-voxel3d">
+            <span>🧊</span> 3D Interactive WebGL
+        </button>
+        <button class="tab-btn" data-tab="tab-video">
+            <span>🎬</span> Video 4D Perception
+        </button>
+        <button class="tab-btn" data-tab="tab-metrics">
+            <span>📈</span> Chỉ số AI & Đánh giá
+        </button>
+        <button class="tab-btn" data-tab="tab-artifacts">
+            <span>📁</span> Kho Artifacts & Tải về
+        </button>
+    </nav>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+
+        <!-- KPI SUMMARY BAR -->
+        <div class="kpi-grid">
+            <div class="kpi-card green">
+                <div class="kpi-label">Độ chính xác (Precision)</div>
+                <div class="kpi-value" id="kpi-precision">68.4%</div>
+                <div class="kpi-sub">Chuẩn CVPR 2023 Occupancy</div>
+            </div>
+            <div class="kpi-card blue">
+                <div class="kpi-label">Độ bao phủ (Recall)</div>
+                <div class="kpi-value" id="kpi-recall">73.2%</div>
+                <div class="kpi-sub">Phát hiện đầy đủ vật cản</div>
+            </div>
+            <div class="kpi-card purple">
+                <div class="kpi-label">Điểm F1-Score</div>
+                <div class="kpi-value" id="kpi-f1">70.7%</div>
+                <div class="kpi-sub">Cân bằng Precision / Recall</div>
+            </div>
+            <div class="kpi-card orange">
+                <div class="kpi-label">Độ trễ suy luận (Latency)</div>
+                <div class="kpi-value" id="kpi-latency">192.7 <span class="kpi-unit">ms</span></div>
+                <div class="kpi-sub">~5.2 FPS tại 200x200x16</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Vật thể phát hiện</div>
+                <div class="kpi-value" id="kpi-detections">12</div>
+                <div class="kpi-sub">Bán kính quét 50m quanh xe</div>
+            </div>
+        </div>
+
+        <!-- TAB 1: OVERVIEW DASHBOARD -->
+        <section id="tab-overview" class="tab-pane active">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🚘</span> Bảng điều khiển ADAS Tích hợp Toàn diện (Master Perception Dashboard)
+                    </div>
+                    <div class="card-actions">
+                        <a href="/files/visualization/multimodal_adas_dashboard.png" target="_blank" class="btn btn-secondary btn-sm">Xem full-size</a>
+                        <a href="/download/visualization/multimodal_adas_dashboard.png" class="btn btn-primary btn-sm">Tải ảnh gốc</a>
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Tổng hợp đồng bộ thời gian thực giữa <strong>3 góc nhìn Camera phía trước</strong> (Trái, Giữa, Phải), <strong>Bản đồ LiDAR BEV</strong> kèm 3D Bounding Boxes chuẩn xác, và <strong>Không gian 3D Occupancy Flow</strong> mô phỏng hướng chuyển động của phương tiện.
+                </p>
+                <div class="viewer-container">
+                    <img src="/files/visualization/multimodal_adas_dashboard.png" alt="ADAS Master Dashboard" class="viewer-image">
+                </div>
+            </div>
+
+            <div class="two-col-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title"><span>⚙️</span> Cấu trúc Mô hình VinFast 4D-OccNet</div>
+                    </div>
+                    <ul style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.8; padding-left: 1.25rem;">
+                        <li><strong>Backbone:</strong> Swin-Transformer trích xuất đặc trưng đa phân giải từ 6 camera vòm (Surround-view).</li>
+                        <li><strong>BEV / Voxel Former:</strong> Deformable Cross-Attention chiếu không gian 2D ảnh sang lưới Voxel 3D.</li>
+                        <li><strong>Temporal Fusion 4D:</strong> Hợp nhất chuỗi $T=5$ bước thời gian liên tiếp để khử góc khuất và ước lượng vector vận tốc $(\Delta x, \Delta y, \Delta z)$.</li>
+                        <li><strong>Dual-Head:</strong> Đầu ra dự đoán đồng thời nhãn ngữ nghĩa (18 semantic classes) và trường vận tốc dòng chảy (Motion Flow).</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title"><span>🛡️</span> Lợi thế cho Người Dùng Thực tế</div>
+                    </div>
+                    <ul style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.8; padding-left: 1.25rem;">
+                        <li><strong>Hiển thị trực quan:</strong> Người lái xe nhìn thấy hộp 3D và khoảng cách (mét) trực tiếp trên màn hình trung tâm.</li>
+                        <li><strong>Bảo vệ góc khuất:</strong> Công nghệ 4D ghi nhớ xe máy, người đi bộ bị khuất sau xe buýt/xe tải lớn.</li>
+                        <li><strong>Dự báo va chạm sớm:</strong> Vector vận tốc cho biết xe nào đang lao tới hoặc chuẩn bị chuyển làn.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: LIDAR BEV & 3D BOXES -->
+        <section id="tab-lidar" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🛰️</span> Bird's Eye View (BEV) LiDAR Point Cloud vs 3D Bounding Boxes
+                    </div>
+                    <div class="card-actions">
+                        <a href="/files/visualization/bev_lidar_groundtruth_pred.png" target="_blank" class="btn btn-secondary btn-sm">Mở tab mới</a>
+                        <a href="/download/visualization/bev_lidar_groundtruth_pred.png" class="btn btn-primary btn-sm">Tải ảnh chất lượng cao</a>
+                    </div>
+                </div>
+
+                <div class="viewer-container">
+                    <img src="/files/visualization/bev_lidar_groundtruth_pred.png" alt="BEV LiDAR Visualizer" class="viewer-image">
+                </div>
+
+                <div class="legend-bar">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#10B981; border: 1px solid #fff;"></div>
+                        <span><strong>Green = Ground Truth</strong> (Nhãn chuẩn từ dữ liệu)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#FF7A00; border: 1px solid #fff;"></div>
+                        <span><strong>Orange/Red = Predicted Box</strong> (Mô hình dự đoán)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#FFD700;"></div>
+                        <span><strong>Yellow/White</strong> (Đám mây điểm LiDAR phản xạ)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#00F0FF; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>
+                        <span><strong>Cyan Triangle</strong> (Xe tự hành VinFast tại tọa độ 0,0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#4B5563; border-radius:50%;"></div>
+                        <span><strong>Vòng tròn đồng tâm:</strong> 10m, 20m, 30m, 40m, 50m</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETECTIONS RADAR TABLE -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><span>📡</span> Bảng Radar Danh sách Vật thể Xung quanh Xe (Real-time Tracks)</div>
+                    <span style="font-size:0.8rem; color:var(--text-secondary);">Sắp xếp theo thứ tự cự ly gần nhất</span>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Mã đối tượng</th>
+                                <th>Phân lớp</th>
+                                <th>Khoảng cách</th>
+                                <th>Vận tốc</th>
+                                <th>Tọa độ 3D [X, Y, Z]</th>
+                                <th>Kích thước [Dài x Rộng x Cao]</th>
+                                <th>Mức cảnh báo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detections-table-body">
+                            <tr>
+                                <td colspan="7" style="text-align: center; color: var(--text-muted);">Đang tải dữ liệu radar...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: CAMERA 3D WIREFRAMES -->
+        <section id="tab-camera" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>📷</span> Camera RGB Trước & Chiếu Hình học 3D Wireframe Boxes
+                    </div>
+                    <div class="card-actions">
+                        <a href="/files/visualization/camera_front_3d_boxes.png" target="_blank" class="btn btn-secondary btn-sm">Xem full-size</a>
+                        <a href="/download/visualization/camera_front_3d_boxes.png" class="btn btn-primary btn-sm">Tải ảnh gốc</a>
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Mô phỏng giao diện hiển thị trên kính lái (HUD / AR-Navigation) cho người lái xe. Từng hộp 3D được chiếu từ tọa độ thực tế lên ma trận điểm ảnh $(u, v)$ qua thông số camera nội chuẩn (Intrinsic Matrix) và ngoại chuẩn (Extrinsic Pose).
+                </p>
+                <div class="viewer-container">
+                    <img src="/files/visualization/camera_front_3d_boxes.png" alt="Camera 3D Bounding Boxes" class="viewer-image">
+                </div>
+                <div class="legend-bar">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#00B4FF;"></div>
+                        <span><strong>Xe hơi (Car)</strong></span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#FF3C3C;"></div>
+                        <span><strong>Xe máy (Motorcycle)</strong></span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#FF3296;"></div>
+                        <span><strong>Người đi bộ (Pedestrian)</strong></span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#FF8C00;"></div>
+                        <span><strong>Xe tải (Truck)</strong></span>
+                    </div>
+                    <div class="legend-item">
+                        <span><strong>Dấu X phía trước hộp:</strong> Định vị đầu xe / hướng di chuyển</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: 3D INTERACTIVE WEBGL VOXEL -->
+        <section id="tab-voxel3d" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🧊</span> Không gian 3D Voxel Tương tác 360° (Plotly WebGL Viewer)
+                    </div>
+                    <div class="card-actions">
+                        <a href="/files/visualization/interactive_3d_occupancy.html" target="_blank" class="btn btn-primary btn-sm">Mở toàn màn hình</a>
+                        <a href="/download/visualization/occupancy_3d.ply" class="btn btn-secondary btn-sm">Tải file .PLY</a>
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    💡 <strong>Hướng dẫn điều khiển:</strong> Bấm giữ chuột trái để <strong>Xoay 360 độ</strong>, giữ chuột phải để <strong>Di chuyển khung nhìn (Pan)</strong>, cuộn chuột giữa để <strong>Phóng to / Thu nhỏ (Zoom)</strong>. Rê chuột vào từng voxel để xem phân lớp ngữ nghĩa và tọa độ chính xác.
+                </p>
+                <div class="viewer-container">
+                    <iframe src="/files/visualization/interactive_3d_occupancy.html" class="viewer-iframe" title="Interactive 3D Voxel Occupancy"></iframe>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><span>📐</span> Phối cảnh 3D Isometric Độ Phân Giải Cao</div>
+                    <a href="/files/visualization/occupancy_3d_isometric.png" target="_blank" class="btn btn-secondary btn-sm">Xem ảnh tĩnh gốc</a>
+                </div>
+                <div class="viewer-container">
+                    <img src="/files/visualization/occupancy_3d_isometric.png" alt="Isometric 3D Occupancy" class="viewer-image">
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: VIDEO 4D PERCEPTION -->
+        <section id="tab-video" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🎬</span> Rạp chiếu 4D Spatio-Temporal Perception Cinema
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn btn-secondary btn-sm video-switch-btn active" data-src="/files/visualization/multimodal_perception_video.mp4">Perception Sync Video</button>
+                        <button class="btn btn-secondary btn-sm video-switch-btn" data-src="/files/visualization/flow_4d_video.mp4">4D Voxel Flow Video</button>
+                    </div>
+                </div>
+
+                <div class="video-wrapper">
+                    <video id="main-video-player" controls autoplay loop playsinline>
+                        <source src="/files/visualization/multimodal_perception_video.mp4" type="video/mp4">
+                        Trình duyệt của bạn không hỗ trợ thẻ video HTML5.
+                    </video>
+                    <div class="video-controls-bar">
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">
+                            Tốc độ phát:
+                            <button class="btn btn-secondary btn-sm video-speed-btn" data-speed="0.5">0.5x</button>
+                            <button class="btn btn-secondary btn-sm video-speed-btn active" data-speed="1.0">1.0x</button>
+                            <button class="btn btn-secondary btn-sm video-speed-btn" data-speed="1.5">1.5x</button>
+                            <button class="btn btn-secondary btn-sm video-speed-btn" data-speed="2.0">2.0x</button>
+                        </div>
+                        <div style="display:flex; gap:0.5rem;">
+                            <a href="/files/visualization/multimodal_perception_animation.gif" target="_blank" class="btn btn-secondary btn-sm">Xem bản GIF</a>
+                            <a href="/download/visualization/multimodal_perception_video.mp4" class="btn btn-primary btn-sm">Tải video MP4</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="two-col-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title"><span>🌀</span> Bản đồ Ảnh động 4D Flow (GIF)</div>
+                    </div>
+                    <div class="viewer-container">
+                        <img src="/files/visualization/flow_4d_animation.gif" alt="4D Flow Animation" class="viewer-image">
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title"><span>⚡</span> Bản đồ Nhận diện Đồng bộ (GIF)</div>
+                    </div>
+                    <div class="viewer-container">
+                        <img src="/files/visualization/multimodal_perception_animation.gif" alt="Perception Animation" class="viewer-image">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 6: AI METRICS -->
+        <section id="tab-metrics" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><span>📊</span> Ma trận Nhầm lẫn (Confusion Matrix 18 Phân lớp)</div>
+                    <a href="/files/evaluation/confusion_matrix.png" target="_blank" class="btn btn-secondary btn-sm">Xem full-size</a>
+                </div>
+                <div class="viewer-container">
+                    <img src="/files/evaluation/confusion_matrix.png" alt="Confusion Matrix" class="viewer-image">
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><span>📋</span> Bảng Chỉ số Đánh giá Chi tiết Từng Phân lớp (Per-Class Benchmark)</div>
+                    <a href="/download/evaluation/per_class_metrics.csv" class="btn btn-secondary btn-sm">Xuất CSV</a>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Class ID</th>
+                                <th>Tên Phân lớp</th>
+                                <th>IoU (%)</th>
+                                <th>Precision (%)</th>
+                                <th>Recall (%)</th>
+                                <th>F1-Score (%)</th>
+                                <th>True Positives (TP)</th>
+                                <th>False Positives (FP)</th>
+                                <th>False Negatives (FN)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-table-body">
+                            <tr>
+                                <td colspan="9" style="text-align: center; color: var(--text-muted);">Đang tải bảng chỉ số...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 7: ARTIFACTS EXPLORER -->
+        <section id="tab-artifacts" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><span>📁</span> Kho Lưu trữ & Tải về Tất cả Artifacts Dự án</div>
+                    <span style="font-size:0.85rem; color:var(--text-secondary);">Nhấp "Xem" để mở trực tiếp hoặc "Tải về" để lưu máy tính</span>
+                </div>
+                <div id="artifacts-grid" class="artifacts-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <p>VinFast ADAS 4D-OccFusion Lab • Advanced Autonomous Driving System (Project RAV-25) • Powered by PyTorch & nuScenes-mini</p>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
